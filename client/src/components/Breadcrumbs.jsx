@@ -87,8 +87,9 @@ const Breadcrumbs = () => {
       // Fallback if hierarchy endpoint doesn't exist
       try {
         const response = await axios.get(`/api/categories/${categoryId}`);
+        const categoryData = response.data.success ? response.data.data : response.data;
         crumbs.push({
-          label: response.data.name || `Category ${categoryId}`,
+          label: categoryData.name || `Category ${categoryId}`,
           path: `/category/${categoryId}`,
           isActive: true
         });

@@ -1,0 +1,3 @@
+GET http://localhost:3001/api/categories/5/subcategories
+Accept: application/json
+User-Agent: Mozilla/5.0...

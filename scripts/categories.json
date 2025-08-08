@@ -1,0 +1,208 @@
+[{
+  "name": "Electronics and Appliances",
+  "name_fi": "Elektroniikka ja kodinkoneet"
+}, {
+  "name": "Small Home Appliances",
+  "name_fi": "Kodin pienkoneet"
+}, {
+  "name": "Coffee Makers",
+  "name_fi": "Kahvinkeittimet"
+}, {
+  "name": "Toasters",
+  "name_fi": "Leivänpaahtimet"
+}, {
+  "name": "Food Processors and Mixers",
+  "name_fi": "Monitoimikoneet ja yleiskoneet"
+}, {
+  "name": "Other small household appliances",
+  "name_fi": "Muut kodin pienkoneet"
+}, {
+  "name": "Vacuum Cleaners",
+  "name_fi": "Pölynimurit"
+}, {
+  "name": "Hand Blenders and Electric Mixers",
+  "name_fi": "Sauvasekoittimet ja sähkövatkaimet"
+}, {
+  "name": "Irons",
+  "name_fi": "Silitysraudat"
+}, {
+  "name": "Blenders",
+  "name_fi": "Tehosekoittimet ja blenderit"
+}, {
+  "name": "Kettles",
+  "name_fi": "Vedenkeittimet"
+}, {
+  "name": "Waffle Irons and Sandwich Grills",
+  "name_fi": "Vohveliraudat ja voileipägrillit"
+}, {
+  "name": "Home Appliances",
+  "name_fi": "Kodinkoneet"
+}, {
+  "name": "Dishwashers",
+  "name_fi": "Astianpesukoneet"
+}, {
+  "name": "Refrigerators",
+  "name_fi": "Jääkaapit"
+}, {
+  "name": "Hobs",
+  "name_fi": "Keittolevyt"
+}, {
+  "name": "Dryers and Drying Cabinets",
+  "name_fi": "Kuivausrummut ja kuivauskaapit"
+}, {
+  "name": "Stoves",
+  "name_fi": "Liedet"
+}, {
+  "name": "Extractor Hoods",
+  "name_fi": "Liesituulettimet"
+}, {
+  "name": "Microwave Ovens",
+  "name_fi": "Mikroaaltouunit"
+}, {
+  "name": "Other Home Appliances",
+  "name_fi": "Muut kodinkoneet"
+}, {
+  "name": "Freezers",
+  "name_fi": "Pakastimet"
+}, {
+  "name": "Washing Machines",
+  "name_fi": "Pyykinpesukoneet"
+}, {
+  "name": "Ovens",
+  "name_fi": "Uunit"
+}, {
+  "name": "Other Electronics and Appliances",
+  "name_fi": "Muu elektroniikka ja kodinkoneet"
+}, {
+  "name": "Phones and Accessories",
+  "name_fi": "Puhelimet ja tarvikkeet"
+}, {
+  "name": "Smartphones",
+  "name_fi": "Matkapuhelimet"
+}, {
+  "name": "Other Smartphones",
+  "name_fi": "Muut matkapuhelimet"
+}, {
+  "name": "Phone Accessories",
+  "name_fi": "Puhelintarvikkeet"
+}, {
+  "name": "Health and Well-being",
+  "name_fi": "Terveys ja hyvinvointi"
+}, {
+  "name": "Information Technology",
+  "name_fi": "Tietotekniikka"
+}, {
+  "name": "Laptops",
+  "name_fi": "Kannettavat tietokoneet"
+}, {
+  "name": "Hard Drives and Storage",
+  "name_fi": "Kiintolevyt ja tallennustila"
+}, {
+  "name": "Calculators",
+  "name_fi": "Laskimet"
+}, {
+  "name": "Monitors",
+  "name_fi": "Näytöt"
+}, {
+  "name": "Peripherals",
+  "name_fi": "Oheislaitteet"
+}, {
+  "name": "Software",
+  "name_fi": "Ohjelmistot"
+}, {
+  "name": "Desktop Computers",
+  "name_fi": "Pöytäkoneet"
+}, {
+  "name": "Tablets and E-readers",
+  "name_fi": "Tabletit ja lukulaitteet"
+}, {
+  "name": "Computer Components",
+  "name_fi": "Tietokonekomponentit"
+}, {
+  "name": "Networking Equipment",
+  "name_fi": "Verkkolaitteet"
+}, {
+  "name": "Photography and Video",
+  "name_fi": "Valokuvaus ja video"
+}, {
+  "name": "Hybrid Cameras",
+  "name_fi": "Hybridikamerat"
+}, {
+  "name": "System Cameras",
+  "name_fi": "Järjestelmäkamerat"
+}, {
+  "name": "Camera Bags",
+  "name_fi": "Kameralaukut"
+}, {
+  "name": "Compact Cameras",
+  "name_fi": "Kompaktikamerat"
+}, {
+  "name": "Other Photography Accessories",
+  "name_fi": "Muut valokuvaustarvikkeet"
+}, {
+  "name": "Lenses",
+  "name_fi": "Objektiivit"
+}, {
+  "name": "Camcorders",
+  "name_fi": "Videokamerat"
+}, {
+  "name": "Video Games and Consoles",
+  "name_fi": "Videopelit ja konsolit"
+}, {
+  "name": "Merchandise",
+  "name_fi": "Oheistuotteet"
+}, {
+  "name": "Game Consoles",
+  "name_fi": "Pelikonsolit"
+}, {
+  "name": "Games",
+  "name_fi": "Pelit"
+}, {
+  "name": "Audio and Video",
+  "name_fi": "Ääni ja kuva"
+}, {
+  "name": "Blu-ray Players",
+  "name_fi": "Blu-ray-soittimet"
+}, {
+  "name": "DVD Players",
+  "name_fi": "DVD-soittimet"
+}, {
+  "name": "Cables and Peripherals",
+  "name_fi": "Kaapelit ja oheislaitteet"
+}, {
+  "name": "Speakers",
+  "name_fi": "Kaiuttimet"
+}, {
+  "name": "Home Theater Systems",
+  "name_fi": "Kotiteatterilaitteet"
+}, {
+  "name": "Headphones",
+  "name_fi": "Kuulokkeet"
+}, {
+  "name": "MP3 Players and Portable Audio",
+  "name_fi": "MP3-soittimet ja muut kannettavat soittimet"
+}, {
+  "name": "Media Players and Set-top Boxes",
+  "name_fi": "Mediatoistimet ja digiboksit"
+}, {
+  "name": "PA Equipment",
+  "name_fi": "PA-laitteet"
+}, {
+  "name": "Radios",
+  "name_fi": "Radiot"
+}, {
+  "name": "Stereos",
+  "name_fi": "Stereot"
+}, {
+  "name": "TV",
+  "name_fi": "TV"
+}, {
+  "name": "Amplifiers and Receivers",
+  "name_fi": "Vahvistimet ja viritinvahvistimet"
+}, {
+  "name": "VCRs",
+  "name_fi": "Videonauhurit"
+}, {
+  "name": "Projectors and Screens",
+  "name_fi": "Videotykit ja valkokankaat"
+}]
