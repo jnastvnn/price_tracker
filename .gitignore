@@ -3,6 +3,7 @@
 
 # Keep this file tracked
 !.gitignore
+!docker-compose.yml
 
 # Explicitly ignore non-app directories
 scripts/
