@@ -7,7 +7,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3001
-      CLIENT_URL: http://localhost:5173services:
+      CLIENT_URL: http://localhost:5173
       CLIENT_URL: https://fip-128-214-255-64.kaj.poutavm.fi
       DATABASE_URL: ${DATABASE_URL}
     ports:
