@@ -1,5 +1,6 @@
 import BaseModel from './BaseModel.js';
-import { ATTRIBUTE_IDS, STATUS } from '../constants/index.js';
+import { ATTRIBUTE_IDS, PAGINATION, STATUS } from '../constants/index.js';
+import { normalizePagination } from '../utils/pagination.js';
 
 /**
  * Category Domain Model
@@ -240,7 +241,11 @@ class Category extends BaseModel {
     return await this.findWhere({ parent_id: parentId }, '*', 'name ASC');
   }
 
-  static async findModelsWithAvgPrice(categoryId) {
+  static async findModelsWithAvgPrice(categoryId, filters = {}) {
+    const { limit, offset } = normalizePagination({
+      page: filters.page,
+      limit: filters.limit ?? PAGINATION.MAX_LIMIT
+    });
     const query = `
       SELECT
         la.value_text AS model,
@@ -258,11 +263,23 @@ class Category extends BaseModel {
         AND TRIM(la.value_text) != ''
       GROUP BY la.value_text
       HAVING COUNT(l.id) > 0
-      ORDER BY listing_count DESC, model ASC`;
-    return await this.executeQuery(query, [categoryId, ATTRIBUTE_IDS.MODEL, ATTRIBUTE_IDS.BRAND, STATUS.SUCCESS]);
+      ORDER BY listing_count DESC, model ASC
+      LIMIT $5 OFFSET $6`;
+    return await this.executeQuery(query, [
+      categoryId,
+      ATTRIBUTE_IDS.MODEL,
+      ATTRIBUTE_IDS.BRAND,
+      STATUS.SUCCESS,
+      limit,
+      offset,
+    ]);
   }
-
-  static async findBrandsWithAvgPrice(categoryId) {
+  
+  static async findBrandsWithAvgPrice(categoryId, filters = {}) {
+    const { limit, offset } = normalizePagination({
+      page: filters.page,
+      limit: filters.limit ?? PAGINATION.MAX_LIMIT
+    });
     const query = `
       WITH normalized_data AS (
         SELECT
@@ -288,8 +305,15 @@ class Category extends BaseModel {
       FROM normalized_data
       GROUP BY normalized_brand
       HAVING COUNT(id) > 0
-      ORDER BY listing_count DESC, brand ASC`;
-    return await this.executeQuery(query, [categoryId, ATTRIBUTE_IDS.BRAND, STATUS.SUCCESS]);
+      ORDER BY listing_count DESC, brand ASC
+      LIMIT $4 OFFSET $5`;
+    return await this.executeQuery(query, [
+      categoryId,
+      ATTRIBUTE_IDS.BRAND,
+      STATUS.SUCCESS,
+      limit,
+      offset,
+    ]);
   }
 
   static async findCategoryPath(categoryId) {

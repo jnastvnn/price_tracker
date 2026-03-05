@@ -1,13 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-
-const api = axios.create({
-    baseURL: '/api',
-    timeout: 10000,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-});
+import { api } from '../utils/api';
 
 export const useCategory = (params = {}) => {
     const { id } = params;
@@ -50,12 +42,7 @@ export const useCategory = (params = {}) => {
             console.error('Error fetching category:', error);
             
             // Handle different error types
-            let errorMessage = 'Failed to fetch category';
-            if (error.response?.data?.error) {
-                errorMessage = error.response.data.error;
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
+            const errorMessage = error.message || 'Failed to fetch category';
             
             setState(prev => ({ 
                 ...prev, 

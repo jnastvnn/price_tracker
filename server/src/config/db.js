@@ -1,24 +1,24 @@
 import pg from 'pg';
-import dotenv from 'dotenv';
-
-dotenv.config();
+import env from './env.js';
+import logger from '../utils/logger.js';
 
 const { Pool } = pg;
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_3oxSkPERbp0I@ep-tiny-cell-abmko6a4-pooler.eu-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require',
-  ssl: {
-    rejectUnauthorized: false
-  }
+  connectionString: env.databaseUrl,
+  max: env.db.poolMax,
+  idleTimeoutMillis: env.db.idleTimeoutMs,
+  connectionTimeoutMillis: env.db.connectionTimeoutMs,
+  ssl: env.db.ssl ? { rejectUnauthorized: false } : false,
 });
 
 // Test the connection
 pool.on('connect', () => {
-  console.log('Connected to the database');
+  logger.info('Connected to the database');
 });
 
 pool.on('error', (err) => {
-  console.error('Database connection error:', err);
+  logger.error('Database connection error', { message: err.message });
   process.exit(-1);
 });
 

@@ -1,57 +1,60 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCategoryListings } from '../hooks/useCategoryListings';
-import { FilterSidebar } from './FilterSidebar';
-import './CategoryListings.css';
+
+
+const priceFormatter = new Intl.NumberFormat('fi-FI', { style: 'currency', currency: 'EUR' });
 
 const ListingCard = ({ listing, categoryId }) => {
   const navigate = useNavigate();
   
   const formatPrice = (price) => {
-    if (!price) return 'Price not available';
-    return `€${parseFloat(price).toFixed(2)}`;
+    if (price === null || price === undefined) return 'Price not available';
+    const numeric = Number(price);
+    if (Number.isNaN(numeric)) return 'Price not available';
+    return priceFormatter.format(numeric);
   };
 
   const handleViewPriceHistory = () => {
-    const model = listing.model;
-    const brand = listing.brands?.split(',')[0]?.trim(); // Get first brand if multiple
-    
-    // Build base URL with only the model
+    const model = listing.model_key || listing.model;
+    const brand = listing.brands?.split(',')[0]?.trim();
     const baseUrl = `/price-history/${encodeURIComponent(model)}`;
-    
-    // Add brand and categoryId as query parameters
     const queryParams = new URLSearchParams();
-    if (brand) {
-      queryParams.append('brand', brand);
-    }
-    if (categoryId) {
-      queryParams.append('categoryId', categoryId);
-    }
-    
+    if (brand) queryParams.append('brand', brand);
+    if (categoryId) queryParams.append('categoryId', categoryId);
+    // signal that the param is a modelKey
+    if (listing.model_key) queryParams.append('isKey', '1');
     const queryString = queryParams.toString();
     navigate(`${baseUrl}${queryString ? `?${queryString}` : ''}`);
   };
 
   return (
-    <div className="listing-card">
-      <div className="listing-content">
-        <div className="listing-model">{listing.model}</div>
-        <div className="listing-brands">{listing.brands || 'Unknown Brand'}</div>
-        <div className="listing-count">
-          {listing.listing_count} listing{listing.listing_count !== 1 ? 's' : ''}
+    <div
+      className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-lg font-semibold text-gray-900">{listing.model_key || listing.model}</div>
+          <div className="text-sm text-gray-600">{listing.brands || 'Unknown Brand'}</div>
+          <div className="text-sm text-gray-500 mt-1">
+            {listing.listing_count} listing{listing.listing_count !== 1 ? 's' : ''}
+          </div>
+        </div>
+        <div className="text-green-600 font-semibold text-lg">
+          {formatPrice(listing.average_price)}
         </div>
       </div>
-      
-      <div className="listing-price">
-        {formatPrice(listing.average_price)}
-      </div>
-      
-      <button 
-        className="price-history-btn"
+
+      <button
         onClick={handleViewPriceHistory}
+        aria-label="View price history"
         title="View price history"
+        className="mt-4 inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 font-medium"
       >
-        📊 Price History
+        <span>📊 Price History</span>
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+        </svg>
       </button>
     </div>
   );
@@ -92,13 +95,13 @@ export const CategoryListings = ({ categoryId }) => {
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeSearch, setActiveSearch] = useState('');
-  const [appliedFilters, setAppliedFilters] = useState({ brands: [] });
+  // Minimal: no sidebar filters
 
   const { listings, loading, error, pagination } = useCategoryListings(categoryId, {
     page: currentPage,
     limit: 12,
     search: activeSearch,
-    brands: appliedFilters.brands
+    // Minimal: no brand filters
   });
 
   const handlePageChange = (newPage) => {
@@ -117,10 +120,7 @@ export const CategoryListings = ({ categoryId }) => {
     setCurrentPage(1);
   };
 
-  const handleFiltersApply = (filters) => {
-    setAppliedFilters(filters);
-    setCurrentPage(1);
-  };
+  // Minimal: no filters
 
   const handleGoBack = () => {
     navigate(-1);
@@ -142,95 +142,103 @@ export const CategoryListings = ({ categoryId }) => {
   }
 
   return (
-    <div className="category-listings">
-      <FilterSidebar 
-        categoryId={categoryId}
-        onFiltersApply={handleFiltersApply}
-        appliedFilters={appliedFilters}
-      />
+    <div className="min-h-screen">
+      <main className="max-w-7xl mx-auto px-4 py-10">
+        <section className="bg-blue-50 backdrop-blur-sm border border-white/40 rounded-2xl shadow-md p-6 md:p-10">
 
-      <div className="main-content">
-        <div className="header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-            <button 
-              onClick={handleGoBack}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#f8f9fa',
-                border: '1px solid #dee2e6',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px'
-              }}
-            >
-              ← Back
-            </button>
-            <h2 style={{ margin: 0 }}>Listings in this Category</h2>
-          </div>
-          <form onSubmit={handleSearch} className="search-form">
-            <input
-              type="text"
-              placeholder="Search listings..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="search-input"
-            />
-            <button type="submit" className="search-btn">Search</button>
-            {activeSearch && (
-              <button type="button" onClick={handleSearchReset} className="clear-btn">
-                Clear
+          {/* Header */}
+          <div className="flex items-center justify-between flex-wrap gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleGoBack}
+                aria-label="Go back"
+                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700"
+              >
+                ← Back
               </button>
-            )}
-          </form>
-        </div>
-
-        {(activeSearch || appliedFilters.brands.length > 0) && (
-          <div className="active-filters">
-            <strong>Active filters:</strong>
-            {activeSearch && <span>Search: "{activeSearch}"</span>}
-            {appliedFilters.brands.map(brand => (
-              <span key={brand}>Brand: {brand}</span>
-            ))}
-          </div>
-        )}
-
-        {pagination && (
-          <div className="results-count">
-            Showing {listings.length} of {pagination.totalItems} grouped listings
-          </div>
-        )}
-
-        {listings.length === 0 ? (
-          <div className="no-results">
-            {activeSearch || appliedFilters.brands.length > 0 ? 
-              'No listings found matching your filters.' :
-              'No listings found in this category.'
-            }
-          </div>
-        ) : (
-          <>
-            <div className="listings-grid">
-              {listings.map((listing, index) => (
-                <ListingCard 
-                  key={`${listing.model}-${index}`} 
-                  listing={listing} 
-                  categoryId={categoryId}
-                />
-              ))}
+              <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+                Listings in this Category
+              </h2>
             </div>
 
-            {loading && <div className="loading-more">Loading more listings...</div>}
+            {/* Search */}
+            <form onSubmit={handleSearch} className="flex items-center gap-2 w-full md:w-auto">
+              <input
+                type="text"
+                placeholder="Search listings..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full md:w-80 px-4 py-2 border-2 border-gray-200 rounded-xl outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+              />
+              <button type="submit" className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">
+                Search
+              </button>
+              {activeSearch && (
+                <button
+                  type="button"
+                  onClick={handleSearchReset}
+                  className="px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-gray-700"
+                >
+                  Clear
+                </button>
+              )}
+            </form>
+          </div>
 
-            <Pagination 
-              pagination={pagination} 
-              onPageChange={handlePageChange} 
-            />
-          </>
-        )}
-      </div>
+          {activeSearch && (
+            <div className="mb-4 flex items-center gap-2 text-sm">
+              <span className="text-gray-500">Active:</span>
+              <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700">Search: “{activeSearch}”</span>
+            </div>
+          )}
+
+          {pagination && (
+            <div className="mb-4 text-sm text-gray-600">
+              Showing {listings.length} of {pagination.totalItems} grouped listings
+            </div>
+          )}
+
+          {listings.length === 0 ? (
+            <div className="text-center text-gray-600 py-16">No listings found{activeSearch ? ' matching your filters.' : ' in this category.'}</div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {listings.map((listing) => (
+                  <ListingCard
+                    key={`${listing.model_key || listing.model}|${listing.brands || 'unknown'}`}
+                    listing={listing}
+                    categoryId={categoryId}
+                  />
+                ))}
+              </div>
+
+              {loading && <div className="text-center text-gray-500 py-6">Loading more listings...</div>}
+
+              {pagination && (
+                <div className="mt-8 flex items-center justify-center gap-3">
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage - 1)}
+                    disabled={!pagination.hasPrevPage}
+                    className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {pagination.currentPage} of {pagination.totalPages}
+                  </span>
+                  <button
+                    onClick={() => handlePageChange(pagination.currentPage + 1)}
+                    disabled={!pagination.hasNextPage}
+                    className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </main>
     </div>
   );
 }; 

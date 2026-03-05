@@ -1,5 +1,57 @@
 import BaseModel from './BaseModel.js';
-import { STATUS } from '../constants/index.js';
+import { ATTRIBUTE_IDS, ATTRIBUTE_NAMES, STATUS } from '../constants/index.js';
+import { buildPagination, normalizePagination } from '../utils/pagination.js';
+
+const normalizeArray = (value) => {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+};
+
+const createParamStore = () => {
+  const values = [];
+  const add = (value) => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+  return { values, add };
+};
+
+const buildListingFilters = (filters, base = {}) => {
+  const { values, add } = createParamStore();
+  const joins = [...(base.joins || [])];
+  const whereConditions = [...(base.where || [])];
+
+  whereConditions.push(`l.status = ${add(STATUS.SUCCESS)}`);
+  whereConditions.push('l.price_numeric IS NOT NULL');
+
+  if (filters.category) {
+    joins.push('JOIN listing_categories lc ON l.id = lc.listing_id');
+    whereConditions.push(`lc.category_id = ${add(filters.category)}`);
+  }
+
+  if (filters.search) {
+    const terms = String(filters.search).trim().split(/\s+/).filter(Boolean);
+    if (terms.length > 0) {
+      const tsQueryString = terms.map(t => `'${t}'`).join(' & ') + ':*';
+      whereConditions.push(`l.tsv @@ to_tsquery('finnish', ${add(tsQueryString)})`);
+    }
+  }
+
+  const brandArray = normalizeArray(filters.brands);
+  if (brandArray.length > 0) {
+    const placeholders = brandArray.map(brand => add(brand)).join(',');
+    whereConditions.push(`la_brand.value_text IN (${placeholders})`);
+  }
+
+  if (filters.minPrice) {
+    whereConditions.push(`l.price_numeric >= ${add(filters.minPrice)}`);
+  }
+  if (filters.maxPrice) {
+    whereConditions.push(`l.price_numeric <= ${add(filters.maxPrice)}`);
+  }
+
+  return { joins, whereConditions, values, add };
+};
 
 /**
  * Listing Domain Model
@@ -353,58 +405,21 @@ class Listing extends BaseModel {
   // --- Data Access Methods (Static) ---
 
   static async findListingsGroupedByModel(filters = {}) {
-    const { page = 1, limit = 10, search, category, brands, minPrice, maxPrice } = filters;
-    const offset = (page - 1) * limit;
-    const queryParams = [];
-    const whereConditions = [
-      "l.status = 'success'", 
-      'l.price_numeric IS NOT NULL', 
-      'la_model.value_text IS NOT NULL'
-    ];
-    const joins = [
-      'LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = 6',
-      'LEFT JOIN listing_attributes la_model ON l.id = la_model.listing_id AND la_model.attribute_id = 2'
-    ];
-  
-    // Keep category as parameter (not hardcoded)
-    if (category) {
-      joins.push('JOIN listing_categories lc ON l.id = lc.listing_id');
-      whereConditions.push(`lc.category_id = $${queryParams.length + 1}`);
-      queryParams.push(category);
-    }
-  
-    // Keep existing search logic
-    if (search) {
-      const terms = search.trim().split(/\s+/).filter(Boolean);
-      if (terms.length > 0) {
-        const tsQueryString = terms.map(t => `'${t}'`).join(' & ') + ':*';
-        whereConditions.push(`l.tsv @@ to_tsquery('finnish', $${queryParams.length + 1})`);
-        queryParams.push(tsQueryString);
-      }
-    }
-  
-    // Keep existing brands filter
-    if (brands) {
-      const brandArray = Array.isArray(brands) ? brands : [brands];
-      const placeholders = brandArray.map((_, i) => `$${queryParams.length + i + 1}`).join(',');
-      whereConditions.push(`la_brand.value_text IN (${placeholders})`);
-      queryParams.push(...brandArray);
-    }
-  
-    // Keep existing price filters
-    if (minPrice) {
-      whereConditions.push(`l.price_numeric >= $${queryParams.length + 1}`);
-      queryParams.push(minPrice);
-    }
-    if (maxPrice) {
-      whereConditions.push(`l.price_numeric <= $${queryParams.length + 1}`);
-      queryParams.push(maxPrice);
-    }
-  
+    const { page, limit, offset } = normalizePagination(filters);
+    const base = {
+      joins: [
+        `LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = ${ATTRIBUTE_IDS.BRAND}`,
+        `LEFT JOIN listing_attributes la_model ON l.id = la_model.listing_id AND la_model.attribute_id = ${ATTRIBUTE_IDS.MODEL}`
+      ],
+      where: ['la_model.value_text IS NOT NULL']
+    };
+    const { joins, whereConditions, values, add } = buildListingFilters(filters, base);
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
     const joinClause = joins.join(' ');
-    
-    // Simplified query structure - matches your SQL
+
+    const limitParam = add(limit);
+    const offsetParam = add(offset);
+
     const listingsQuery = `
       SELECT 
         COALESCE(la_model.value_text, 'Unknown Model') AS model,
@@ -414,7 +429,7 @@ class Listing extends BaseModel {
       FROM listings l ${joinClause} ${whereClause}
       GROUP BY la_model.value_text
       ORDER BY listing_count DESC
-      LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+      LIMIT ${limitParam} OFFSET ${offsetParam}`;
   
     // Keep count query for pagination
     const countQuery = `
@@ -422,28 +437,58 @@ class Listing extends BaseModel {
         SELECT 1 FROM listings l ${joinClause} ${whereClause} GROUP BY la_model.value_text
       ) grouped_results`;
   
-    queryParams.push(limit, offset);
     const [countResult, listingsResult] = await Promise.all([
-      this.executeCountQuery(countQuery, queryParams.slice(0, -2)),
-      this.executeQuery(listingsQuery, queryParams)
+      this.executeCountQuery(countQuery, values.slice(0, -2)),
+      this.executeQuery(listingsQuery, values)
     ]);
-  
-    const totalItems = countResult;
-    const totalPages = Math.ceil(totalItems / limit);
-    
-    // Keep pagination object
+
     return {
       listings: listingsResult,
-      pagination: {
-        currentPage: parseInt(page, 10),
-        totalPages,
-        totalItems,
-        itemsPerPage: parseInt(limit, 10),
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-        nextPage: page < totalPages ? Number(page) + 1 : null,
-        prevPage: page > 1 ? Number(page) - 1 : null
-      }
+      pagination: buildPagination(page, limit, countResult)
+    };
+  }
+
+  static async findListingsGroupedByModelKey(filters = {}) {
+    const { page, limit, offset } = normalizePagination(filters);
+    const base = {
+      joins: [
+        'JOIN listing_attributes la_model_key ON l.id = la_model_key.listing_id',
+        `JOIN product_attributes pa_model_key ON pa_model_key.id = la_model_key.attribute_id AND pa_model_key.name = '${ATTRIBUTE_NAMES.MODEL_KEY}'`,
+        `LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = ${ATTRIBUTE_IDS.BRAND}`
+      ],
+      where: ['la_model_key.value_text IS NOT NULL']
+    };
+    const { joins, whereConditions, values, add } = buildListingFilters(filters, base);
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    const joinClause = joins.join(' ');
+
+    const limitParam = add(limit);
+    const offsetParam = add(offset);
+
+    const listingsQuery = `
+      SELECT 
+        la_model_key.value_text AS model_key,
+        STRING_AGG(DISTINCT la_brand.value_text, ', ' ORDER BY la_brand.value_text) AS brands,
+        COUNT(l.id) AS listing_count,
+        ROUND(AVG(l.price_numeric)::numeric, 0) AS average_price
+      FROM listings l ${joinClause} ${whereClause}
+      GROUP BY la_model_key.value_text
+      ORDER BY listing_count DESC
+      LIMIT ${limitParam} OFFSET ${offsetParam}`;
+
+    const countQuery = `
+      SELECT COUNT(*) AS total FROM (
+        SELECT 1 FROM listings l ${joinClause} ${whereClause} GROUP BY la_model_key.value_text
+      ) grouped_results`;
+
+    const [countResult, listingsResult] = await Promise.all([
+      this.executeCountQuery(countQuery, values.slice(0, -2)),
+      this.executeQuery(listingsQuery, values)
+    ]);
+
+    return {
+      listings: listingsResult,
+      pagination: buildPagination(page, limit, countResult)
     };
   }
 
@@ -460,73 +505,127 @@ class Listing extends BaseModel {
         JOIN listing_categories lc ON l.id = lc.listing_id
         JOIN listing_attributes la ON l.id = la.listing_id
         WHERE lc.category_id = $1
-          AND la.attribute_id = 6 AND l.status = 'success'
+          AND la.attribute_id = $2 AND l.status = $3
           AND l.price_numeric IS NOT NULL AND la.value_text IS NOT NULL AND TRIM(la.value_text) != ''
       )
       SELECT brand, COUNT(*) AS listing_count, ROUND(AVG(price_numeric)::numeric, 2) AS average_price
       FROM brand_data GROUP BY brand ORDER BY listing_count DESC, brand ASC`;
-    return await this.executeQuery(query, [categoryId]);
+    return await this.executeQuery(query, [categoryId, ATTRIBUTE_IDS.BRAND, STATUS.SUCCESS]);
   }
 
   static async searchByAttributes(filters = {}) {
-    const { attributeValue, attributeId, categoryId, page = 1, limit = 10, minPrice, maxPrice } = filters;
-    const offset = (page - 1) * limit;
-    const queryParams = [attributeValue];
+    const { attributeValue, attributeId, categoryId, minPrice, maxPrice } = filters;
+    const { page, limit, offset } = normalizePagination(filters);
+    const { values, add } = createParamStore();
+
     let query = `
       SELECT DISTINCT l.id, l.listing_id, l.title, l.description, l.price_numeric, l.currency, l.url,
         l.post_time, l.created_at, la_model.value_text as model, la_brand.value_text as brand
       FROM listings l
       JOIN listing_attributes la_search ON l.id = la_search.listing_id
-      LEFT JOIN listing_attributes la_model ON l.id = la_model.listing_id AND la_model.attribute_id = 2
-      LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = 6`;
-    const whereConditions = ["l.status = 'success'", 'l.price_numeric IS NOT NULL', 'la_search.value_text = $1'];
+      LEFT JOIN listing_attributes la_model ON l.id = la_model.listing_id AND la_model.attribute_id = ${ATTRIBUTE_IDS.MODEL}
+      LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = ${ATTRIBUTE_IDS.BRAND}`;
+    const whereConditions = [
+      `l.status = ${add(STATUS.SUCCESS)}`,
+      'l.price_numeric IS NOT NULL',
+      `la_search.value_text = ${add(attributeValue)}`
+    ];
 
     if (attributeId) {
-      whereConditions.push(`la_search.attribute_id = $${queryParams.length + 1}`);
-      queryParams.push(attributeId);
+      whereConditions.push(`la_search.attribute_id = ${add(attributeId)}`);
     }
     if (categoryId) {
       query += ` JOIN listing_categories lc ON l.id = lc.listing_id`;
-      whereConditions.push(`lc.category_id = $${queryParams.length + 1}`);
-      queryParams.push(categoryId);
+      whereConditions.push(`lc.category_id = ${add(categoryId)}`);
     }
     if (minPrice) {
-      whereConditions.push(`l.price_numeric >= $${queryParams.length + 1}`);
-      queryParams.push(minPrice);
+      whereConditions.push(`l.price_numeric >= ${add(minPrice)}`);
     }
     if (maxPrice) {
-      whereConditions.push(`l.price_numeric <= $${queryParams.length + 1}`);
-      queryParams.push(maxPrice);
+      whereConditions.push(`l.price_numeric <= ${add(maxPrice)}`);
     }
 
-    query += ` WHERE ${whereConditions.join(' AND ')} ORDER BY l.post_time DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    const limitParam = add(limit);
+    const offsetParam = add(offset);
+
+    query += ` ${whereClause} ORDER BY l.post_time DESC LIMIT ${limitParam} OFFSET ${offsetParam}`;
     const countQuery = `
       SELECT COUNT(DISTINCT l.id) as total
       FROM listings l
       JOIN listing_attributes la_search ON l.id = la_search.listing_id
       ${categoryId ? 'JOIN listing_categories lc ON l.id = lc.listing_id' : ''}
-      WHERE ${whereConditions.join(' AND ')}`;
+      ${whereClause}`;
 
-    queryParams.push(limit, offset);
     const [countResult, listingsResult] = await Promise.all([
-      this.executeCountQuery(countQuery, queryParams.slice(0, -2)),
-      this.executeQuery(query, queryParams)
+      this.executeCountQuery(countQuery, values.slice(0, -2)),
+      this.executeQuery(query, values)
     ]);
 
-    const totalItems = countResult;
-    const totalPages = Math.ceil(totalItems / limit);
     return {
       listings: listingsResult.map(row => new this(row)),
-      pagination: {
-        currentPage: parseInt(page, 10),
-        totalPages,
-        totalItems,
-        itemsPerPage: parseInt(limit, 10),
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1,
-        nextPage: page < totalPages ? Number(page) + 1 : null,
-        prevPage: page > 1 ? Number(page) - 1 : null
-      }
+      pagination: buildPagination(page, limit, countResult)
+    };
+  }
+
+  static async findByModelKey(filters = {}) {
+    const { modelKey, categoryId, minPrice, maxPrice } = filters;
+    const { page, limit, offset } = normalizePagination(filters);
+    const { values, add } = createParamStore();
+
+    let query = `
+      SELECT DISTINCT 
+        l.id, l.listing_id, l.title, l.description, l.price_numeric, l.currency, l.url,
+        l.post_time, l.created_at,
+        la_model.value_text as model,
+        la_brand.value_text as brand
+      FROM listings l
+      JOIN listing_attributes la_key ON l.id = la_key.listing_id
+      JOIN product_attributes pa_key ON pa_key.id = la_key.attribute_id AND pa_key.name = '${ATTRIBUTE_NAMES.MODEL_KEY}'
+      LEFT JOIN listing_attributes la_model ON l.id = la_model.listing_id
+      LEFT JOIN product_attributes pa_model ON pa_model.id = la_model.attribute_id AND pa_model.name = '${ATTRIBUTE_NAMES.MODEL}'
+      LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id
+      LEFT JOIN product_attributes pa_brand ON pa_brand.id = la_brand.attribute_id AND pa_brand.name = '${ATTRIBUTE_NAMES.BRAND}'`;
+
+    const whereConditions = [
+      `l.status = ${add(STATUS.SUCCESS)}`,
+      'l.price_numeric IS NOT NULL',
+      `la_key.value_text = ${add(modelKey)}`
+    ];
+
+    if (categoryId) {
+      query += ` JOIN listing_categories lc ON l.id = lc.listing_id`;
+      whereConditions.push(`lc.category_id = ${add(categoryId)}`);
+    }
+    if (minPrice) {
+      whereConditions.push(`l.price_numeric >= ${add(minPrice)}`);
+    }
+    if (maxPrice) {
+      whereConditions.push(`l.price_numeric <= ${add(maxPrice)}`);
+    }
+
+    const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
+    const limitParam = add(limit);
+    const offsetParam = add(offset);
+
+    query += ` ${whereClause} ORDER BY l.post_time DESC LIMIT ${limitParam} OFFSET ${offsetParam}`;
+
+    const countQuery = `
+      SELECT COUNT(DISTINCT l.id) as total
+      FROM listings l
+      JOIN listing_attributes la_key ON l.id = la_key.listing_id
+      JOIN product_attributes pa_key ON pa_key.id = la_key.attribute_id AND pa_key.name = '${ATTRIBUTE_NAMES.MODEL_KEY}'
+      ${categoryId ? 'JOIN listing_categories lc ON l.id = lc.listing_id' : ''}
+      ${whereClause}`;
+
+    const [countResult, listingsResult] = await Promise.all([
+      this.executeCountQuery(countQuery, values.slice(0, -2)),
+      this.executeQuery(query, values)
+    ]);
+
+    return {
+      listings: listingsResult, // raw rows to preserve brand/model columns
+      pagination: buildPagination(page, limit, countResult)
     };
   }
 }

@@ -1,10 +1,18 @@
 import Listing from '../models/Listing.js';
+import AppError from '../utils/AppError.js';
+import ResponseFormatter from '../utils/ResponseFormatter.js';
 
 const ListingController = {
   // GET /api/listings
   async list(req, res) {
     const result = await Listing.findListingsGroupedByModel(req.query);
-    res.json({ success: true, data: result });
+    return ResponseFormatter.success(res, result);
+  },
+  
+  // GET /api/listings/by-model-key (grouped)
+  async listByModelKey(req, res) {
+    const result = await Listing.findListingsGroupedByModelKey(req.query);
+    return ResponseFormatter.success(res, result);
   },
 
   // GET /api/listings/:id
@@ -13,38 +21,45 @@ const ListingController = {
     const listing = await Listing.findSuccessfulById(id);
 
     if (!listing) {
-      return res.status(404).json({ success: false, error: 'Listing not found' });
+      throw new AppError(404, 'Listing not found');
     }
 
-    res.json({ success: true, data: listing.toDisplayFormat() });
+    return ResponseFormatter.success(res, listing.toDisplayFormat());
   },
 
   // GET /api/listings/brands
   async brands(req, res) {
     const { category } = req.query;
     if (!category) {
-      return res.status(400).json({ success: false, error: 'Category parameter is required' });
+      throw new AppError(400, 'Category parameter is required');
     }
 
     const brands = await Listing.findBrandsByCategory(category);
-    res.json({ success: true, data: brands });
+    return ResponseFormatter.success(res, brands);
   },
 
   // GET /api/listings/search-by-attributes
   async searchByAttributes(req, res) {
     const { attributeValue } = req.query;
     if (!attributeValue) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'attributeValue parameter is required' 
-      });
+      throw new AppError(400, 'attributeValue parameter is required');
     }
 
     const result = await Listing.searchByAttributes(req.query);
     // Convert listing data to display format
     result.listings = result.listings.map(listing => listing.toDisplayFormat());
     
-    res.json({ success: true, data: result });
+    return ResponseFormatter.success(res, result);
+  },
+
+  // GET /api/listings/by-model-key?modelKey=iphone12pro&category=123
+  async byModelKey(req, res) {
+    const { modelKey } = req.query;
+    if (!modelKey) {
+      throw new AppError(400, 'modelKey parameter is required');
+    }
+    const result = await Listing.findByModelKey(req.query);
+    return ResponseFormatter.success(res, result);
   }
 };
 

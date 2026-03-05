@@ -33,7 +33,7 @@ export const RATE_LIMITS = {
   // Heavy DB queries (models, brands)
   HEAVY_QUERIES: {
     windowMs: 60 * 1000, // 1 minute
-    max: 10, // 10 requests per minute
+    max: 50, // 10 requests per minute
     message: {
       error: 'Too many heavy query requests, please try again in a minute.',
       retryAfter: '1 minute'
@@ -54,7 +54,7 @@ export const RATE_LIMITS = {
 // Slow down configuration - progressively slow down repeated requests
 export const SLOW_DOWN_CONFIG = {
   windowMs: 60 * 1000, // 1 minute
-  delayAfter: 5, // Start slowing down after 5 requests
+  delayAfter: 50, // Start slowing down after 5 requests
   maxDelayMs: 5000, // Maximum delay of 5 seconds
   skipFailedRequests: true, // Don't count failed requests
   skipSuccessfulRequests: false // Count successful requests

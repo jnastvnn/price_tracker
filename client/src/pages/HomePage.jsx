@@ -85,9 +85,7 @@ const categoriesWithChildren = [
     ]
   },
   // Categories without children or with fewer children
-  { id: 25, name: 'Other Electronics', children: [] },
-  { id: 30, name: 'Health & Well-being', children: [] },
-  { id: 71, name: 'Watches', children: [] },
+  { id: 25, name: 'Other Electronics', children: [] }
 ];
 
 export const HomePage = () => {
@@ -95,7 +93,7 @@ export const HomePage = () => {
   const [hoveredCategory, setHoveredCategory] = useState(null);
 
   const handleSearch = (query) => {
-    console.log('Searching for:', query);
+    // TODO: implement search route/state if needed
   };
 
   const handleCategoryClick = (categoryId) => {
@@ -103,182 +101,55 @@ export const HomePage = () => {
   };
 
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
-        html, body {
-          margin: 0 !important;
-          padding: 0 !important;
-          font-family: 'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-        }
-      `}</style>
-      <div className="home-page" style={{ margin: 0, padding: 0 }}>
-        <header style={{
-          backgroundColor: '#000000',
-          borderBottom: '1px solid #ddd',
-          fontSize: '1.0rem', // Increase base font size for header
-          width: '100vw',
-          position: 'relative',
-          left: '50%',
-          right: '50%',
-          marginLeft: '-50vw',
-          marginRight: '-50vw',
-          boxSizing: 'border-box',
-          marginTop: 0,
-          top: 0,
-          paddingTop: 0,
-          zIndex: 100,
-          fontFamily: "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-        }}>
-          {/* Single header bar with everything */}
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            position: 'relative',
-            minHeight: '54px',
-            maxWidth: '1440px',
-            margin: '0 auto',
-            width: '100%',
-            padding: '0.5rem 1.5rem',
-            boxSizing: 'border-box',
-            fontFamily: "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
-          }}>
-            {/* Logo */}
-            <h1 style={{ marginLeft: -2, marginRight: '2rem', marginTop: 0, marginBottom: 0, fontSize: '1.45rem', minWidth: 'fit-content', letterSpacing: '-0.5px', color: '#fff', fontWeight: 700, fontFamily: "'Inter', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif" }}>Price Tracker</h1>
-            
-            {/* Category navigation */}
-            <nav style={{ 
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.7rem', // Reduce gap
-              flex: '1',
-              justifyContent: 'center',
-              position: 'relative',
-              fontSize: '1.08em', // Larger nav font
-              color: '#fff',
-            }}>
-              {categoriesWithChildren.map((category) => (
+    <div className="min-h-screen flex flex-col">
+      <header>
+      
+        <nav className="flex justify-center items-center gap-2 py-4">
+        <h1 className="font-['Open_Sans'] text-2xl font-bold mr-10">Price Tracker</h1>
+          {categoriesWithChildren.map((category) => (
+            <div
+              key={category.id}
+              className="relative font-['Open_Sans'] font-bold text-sm hover:bg-gray-200 hover:text-black rounded-md py-1 px-1"
+              onMouseEnter={() => setHoveredCategory(category.id)}
+              onMouseLeave={() => setHoveredCategory(null)}
+            >
+              <button onClick={() => handleCategoryClick(category.id)}>
+                {category.name}
+              </button>
+              
+              {hoveredCategory === category.id && category.children.length > 0 && (
                 <div
-                  key={category.id}
-                  style={{ position: 'relative' }}
+                  className="absolute duration-300 top-full left-0 mt-0 z-10 bg-white divide-y divide-gray-100 rounded-sm shadow-sm w-44 "
                   onMouseEnter={() => setHoveredCategory(category.id)}
                   onMouseLeave={() => setHoveredCategory(null)}
                 >
-                  <button
-                    onClick={() => handleCategoryClick(category.id)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      padding: '0.35rem 0.15rem', // Reduce padding
-                      fontSize: '1em', // Larger
-                      color: '#fff',
-                      cursor: 'pointer',
-                      textDecoration: 'none',
-                      borderBottom: '2px solid transparent',
-                      transition: 'all 0.2s ease',
-                      whiteSpace: 'nowrap',
-                      minWidth: 'unset',
-                      maxWidth: '160px',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                    onMouseEnter={(e) => {
-                      e.target.style.color = '#ffd700';
-                      e.target.style.borderBottomColor = '#ffd700';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.target.style.color = '#fff';
-                      e.target.style.borderBottomColor = 'transparent';
-                    }}
-                  >
-                    {category.name}
-                  </button>
-                  
-                  {/* Dropdown menu for children */}
-                  {hoveredCategory === category.id && category.children.length > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      top: '100%',
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      backgroundColor: '#222',
-                      border: '1px solid #333',
-                      borderRadius: '4px',
-                      boxShadow: '0 4px 6px rgba(0, 0, 0, 0.18)',
-                      zIndex: 1000,
-                      minWidth: '170px',
-                      marginTop: '2px',
-                      fontSize: '1em', // Larger dropdown font
-                    }}>
-                      {category.children.map((child, index) => (
-                        <button
-                          key={child.id}
-                          onClick={() => handleCategoryClick(child.id)}
-                          style={{
-                            display: 'block',
-                            width: '100%',
-                            padding: '0.55rem 0.9rem', // Reduce padding
-                            border: 'none',
-                            background: 'none',
-                            textAlign: 'left',
-                            fontSize: '1em',
-                            color: '#fff',
-                            cursor: 'pointer',
-                            borderBottom: index < category.children.length - 1 ? '1px solid #333' : 'none',
-                            whiteSpace: 'nowrap',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                          }}
-                          onMouseEnter={(e) => {
-                            e.target.style.backgroundColor = '#333';
-                            e.target.style.color = '#ffd700';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.backgroundColor = 'transparent';
-                            e.target.style.color = '#fff';
-                          }}
-                        >
-                          {child.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {category.children.map((child) => (
+                    <button
+                      key={child.id}
+                      onClick={() => handleCategoryClick(child.id)}
+                      className="block w-full text-left px-4 py-2 hover:bg-gray-100"
+                    >
+                      {child.name}
+                    </button>
+                  ))}
                 </div>
-              ))}
-            </nav>
-
-            {/* Right side navigation */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '0.7rem', // Reduce gap
-              minWidth: 'fit-content',
-              fontSize: '1em', // Larger font
-            }}>
-              {/* Add any right-side links here, ensure white color if added */}
+              )}
             </div>
-          </div>
-        </header>
-        
-        <main style={{ 
-          display: 'flex', 
-          justifyContent: 'center', 
-          alignItems: 'center', 
-          height: 'calc(100vh - 70px)', // Reduce header height
-          padding: '1.5rem' // Reduce padding
-        }}>
-          <div style={{ textAlign: 'center', maxWidth: '600px' }}>
-            <h2 style={{ marginBottom: '1.2rem', color: '#333', fontSize: '1.15rem', fontWeight: 500 }}>
-              Find the best prices across categories
-            </h2>
-            <SearchBar 
-              onSearch={handleSearch} 
-              placeholder="Search for a product, brand, or model..." 
-            />
-          </div>
-        </main>
-      </div>
-    </>
+          ))}
+        </nav>
+      </header>
+      
+      <main className="flex-1 grid place-items-center px-8">
+        <section className="w-full max-w-8xl grid place-items-center rounded-2xl md:p-80 shadow min-h-[80vh] overflow-hidden" style={{background: 'radial-gradient(ellipse at left top,rgb(91, 127, 120),rgb(65, 97, 162), #93c5fd)'}}>
+        <div>
+          <SearchBar 
+            onSearch={handleSearch} 
+            placeholder="Search for a product, brand, or model..." 
+          />
+        </div>
+        </section>
+
+      </main>
+    </div>
   );
 };

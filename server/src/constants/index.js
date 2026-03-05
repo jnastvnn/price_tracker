@@ -22,6 +22,12 @@ export const ATTRIBUTE_IDS = {
   PANEL_TECHNOLOGY: 14
 };
 
+export const ATTRIBUTE_NAMES = {
+  MODEL_KEY: 'model_key',
+  MODEL: 'Model',
+  BRAND: 'Brand'
+};
+
 // HTTP status codes
 export const HTTP_STATUS = {
   OK: 200,

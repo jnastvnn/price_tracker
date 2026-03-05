@@ -95,14 +95,10 @@ export const additionalSecurity = (req, res, next) => {
   
   // Add custom security headers
   res.setHeader('X-API-Version', '1.0');
-  res.setHeader('X-Response-Time', Date.now() - req.startTime);
   
   // Prevent MIME type sniffing
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  
-  // Add timestamp to track request processing time
-  req.startTime = Date.now();
-  
+
   next();
 };
 

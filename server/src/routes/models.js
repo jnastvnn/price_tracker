@@ -1,25 +1,16 @@
 import express from 'express';
-import ProductModel from '../models/ProductModel.js';
 import asyncHandler from '../utils/asyncHandler.js';
+import ModelController from '../controllers/model.controller.js';
 
 const router = express.Router();
 
-router.get('/:modelName/prices', asyncHandler(async (req, res) => {
-  const { modelName } = req.params;
-  const { categoryId } = req.query;
-  const decodedModelName = decodeURIComponent(modelName);
-  const priceHistory = await ProductModel.getModelPriceHistory(decodedModelName, categoryId);
-  res.json({ success: true, data: priceHistory });
-}));
+router.get('/:modelName/prices', asyncHandler(ModelController.pricesByModelName));
+router.get('/prices', asyncHandler(ModelController.prices));
 
-router.get('/prices', asyncHandler(async (req, res) => {
-  const { model: modelQuery, categoryId } = req.query;
-  if (!modelQuery) {
-    return res.status(400).json({ success: false, error: 'Model parameter is required' });
-  }
-  const modelName = decodeURIComponent(modelQuery);
-  const priceHistory = await ProductModel.getModelPriceHistory(modelName, categoryId);
-  res.json({ success: true, data: priceHistory });
-}));
+// Return the best image URL for a given model (and optional categoryId)
+router.get('/image', asyncHandler(ModelController.image));
+
+// Return canonical product info (name, brand, specs, images) by model_key or model name
+router.get('/info', asyncHandler(ModelController.info));
 
 export default router;

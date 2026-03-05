@@ -1,11 +1,13 @@
 import Category from '../models/Category.js';
+import AppError from '../utils/AppError.js';
+import ResponseFormatter from '../utils/ResponseFormatter.js';
 
 const CategoryController = {
   // GET /api/categories
   async listLevel1(req, res) {
     const categories = await Category.findByLevel(1);
     const displayCategories = categories.map(cat => cat.toDisplayFormat());
-    res.json({ success: true, data: displayCategories });
+    return ResponseFormatter.success(res, displayCategories);
   },
 
   // GET /api/categories/:id
@@ -13,12 +15,12 @@ const CategoryController = {
     const { id } = req.params;
     const category = await Category.findById(id);
     if (!category) {
-      return res.status(404).json({ success: false, error: 'Category not found' });
+      throw new AppError(404, 'Category not found');
     }
     
     // Enrich with breadcrumbs
     category.breadcrumbs = await Category.findCategoryPath(id);
-    res.json({ success: true, data: category.toDisplayFormat() });
+    return ResponseFormatter.success(res, category.toDisplayFormat());
   },
 
   // GET /api/categories/:id/subcategories
@@ -28,33 +30,33 @@ const CategoryController = {
     const displayCategories = categories
       .filter(cat => cat.is_active)
       .map(cat => cat.toDisplayFormat());
-    res.json({ success: true, data: displayCategories });
+    return ResponseFormatter.success(res, displayCategories);
   },
 
   // GET /api/categories/:id/models
   async modelsWithAvgPrice(req, res) {
     const { id } = req.params;
-    const modelsData = await Category.findModelsWithAvgPrice(id);
+    const modelsData = await Category.findModelsWithAvgPrice(id, req.query);
     const models = modelsData.map(model => ({
       ...model,
       price_reliability: calculatePriceReliability(model.listing_count),
       is_popular: model.listing_count >= 5,
       formatted_price: formatPrice(model.average_price)
     }));
-    res.json({ success: true, data: models });
+    return ResponseFormatter.success(res, models);
   },
 
   // GET /api/categories/:id/brands
   async brandsWithAvgPrice(req, res) {
     const { id } = req.params;
-    const brandsData = await Category.findBrandsWithAvgPrice(id);
+    const brandsData = await Category.findBrandsWithAvgPrice(id, req.query);
     const brands = brandsData.map(brand => ({
       ...brand,
       price_reliability: calculatePriceReliability(brand.listing_count),
       is_popular: brand.listing_count >= 5,
       formatted_price: formatPrice(brand.average_price)
     }));
-    res.json({ success: true, data: brands });
+    return ResponseFormatter.success(res, brands);
   },
   
   // GET /api/categories/:id/stats
@@ -62,16 +64,16 @@ const CategoryController = {
     const { id } = req.params;
     const stats = await Category.getCategoryStats(id);
     if (!stats) {
-        return res.status(404).json({ success: false, error: 'No stats found for this category' });
+      throw new AppError(404, 'No stats found for this category');
     }
     const enhancedStats = {
-        ...stats,
-        has_sufficient_data: stats.total_listings >= 10,
-        price_reliability: calculatePriceReliability(stats.total_listings),
-        market_activity: calculateMarketActivity(stats.total_listings, stats.unique_brands),
-        last_updated: new Date().toISOString()
+      ...stats,
+      has_sufficient_data: stats.total_listings >= 10,
+      price_reliability: calculatePriceReliability(stats.total_listings),
+      market_activity: calculateMarketActivity(stats.total_listings, stats.unique_brands),
+      last_updated: new Date().toISOString()
     };
-    res.json({ success: true, data: enhancedStats });
+    return ResponseFormatter.success(res, enhancedStats);
   },
   
   // GET /api/categories/tree
@@ -79,7 +81,7 @@ const CategoryController = {
     const { rootId } = req.query;
     const treeData = await Category.findCategoryTree(rootId || null);
     const categoryTree = buildHierarchicalTree(treeData);
-    res.json({ success: true, data: categoryTree });
+    return ResponseFormatter.success(res, categoryTree);
   }
 };
 

@@ -1,6 +1,5 @@
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 
 // Import routes
 import listingsRouter from './routes/listings.js';
@@ -24,15 +23,21 @@ import {
   requestSizeLimiter 
 } from './middleware/security.js';
 import { sanitizeInput } from './middleware/validation.js';
-
-// Load environment variables
-dotenv.config();
+import requestLogger from './middleware/requestLogger.js';
+import responseTime from './middleware/responseTime.js';
+import notFound from './middleware/notFound.js';
+import errorHandler from './middleware/errorHandler.js';
+import env from './config/env.js';
+import logger from './utils/logger.js';
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = env.port;
 
 // Trust proxy for accurate IP addresses (important for rate limiting)
 app.set('trust proxy', 1);
+
+// Response time header
+app.use(responseTime);
 
 // Security middleware (apply early)
 app.use(securityHeaders);
@@ -48,7 +53,7 @@ app.use(slowDownMiddleware);
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  origin: env.clientUrl,
   credentials: true,
   optionsSuccessStatus: 200 // Some legacy browsers choke on 204
 }));
@@ -60,17 +65,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Input sanitization
 app.use(sanitizeInput);
 
-// Enhanced request logging middleware
-app.use((req, res, next) => {
-  
-  
-  // Log query parameters if present
-  if (Object.keys(req.query).length > 0) {
-    console.log(`Query params: ${JSON.stringify(req.query)}`);
-  }
-  
-  next();
-});
+// Request logging
+app.use(requestLogger);
 
 // Health check endpoint with specific rate limiting
 app.get('/health', healthCheckRateLimit, (req, res) => {
@@ -90,58 +86,16 @@ app.use('/api/models', heavyQueryRateLimit, modelsRouter);
 app.use('/api/brands', heavyQueryRateLimit, brandsRouter);
 
 // 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({ 
-    error: 'Route not found',
-    message: `Cannot ${req.method} ${req.originalUrl}`,
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Enhanced global error handler
-// eslint-disable-next-line no-unused-vars
-app.use((err, req, res, _next) => {
-  const timestamp = new Date().toISOString();
-  const errorId = Math.random().toString(36).substring(2, 15);
-  
-  // Log error details
-  console.error(`[${timestamp}] Error ID: ${errorId}`);
-  console.error('Error details:', {
-    message: err.message,
-    stack: err.stack,
-    url: req.originalUrl,
-    method: req.method,
-    ip: req.ip,
-    userAgent: req.get('User-Agent')
-  });
-  
-  // Determine error status
-  const status = err.status || err.statusCode || 500;
-  
-  // Different responses for different environments
-  const errorResponse = {
-    error: 'Internal server error',
-    message: status === 500 ? 'Something went wrong' : err.message,
-    timestamp,
-    errorId
-  };
-  
-  // Add stack trace in development
-  if (process.env.NODE_ENV === 'development') {
-    errorResponse.stack = err.stack;
-    errorResponse.details = err;
-  }
-  
-  res.status(status).json(errorResponse);
-});
+app.use('*', notFound);
+app.use(errorHandler);
 
 // Graceful shutdown handlers
 const gracefulShutdown = (signal) => {
-  console.log(`${signal} received, shutting down gracefully`);
+  logger.info(`${signal} received, shutting down gracefully`);
   
   // Close server
   server.close(() => {
-    console.log('HTTP server closed');
+    logger.info('HTTP server closed');
     
     // Close database connections, cleanup, etc.
     process.exit(0);
@@ -149,7 +103,7 @@ const gracefulShutdown = (signal) => {
   
   // Force close after 10 seconds
   setTimeout(() => {
-    console.error('Could not close connections in time, forcefully shutting down');
+    logger.error('Could not close connections in time, forcefully shutting down');
     process.exit(1);
   }, 10000);
 };
@@ -159,21 +113,21 @@ process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
-  console.error('Uncaught Exception:', err);
+  logger.error('Uncaught Exception', { message: err.message });
   process.exit(1);
 });
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  logger.error('Unhandled Rejection', { reason: String(reason) });
   process.exit(1);
 });
 
 // Start server
 const server = app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔒 Security: Rate limiting and security headers enabled`);
-  console.log(`📝 Logging: Enhanced request logging enabled`);
-  console.log(`⚡ Performance: Compression enabled`);
-}); 
+  logger.info(`Server running on http://localhost:${PORT}`);
+  logger.info(`Environment: ${env.nodeEnv}`);
+  logger.info('Security: Rate limiting and security headers enabled');
+  logger.info('Logging: Request logging enabled');
+  logger.info('Performance: Compression enabled');
+});

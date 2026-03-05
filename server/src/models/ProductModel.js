@@ -354,10 +354,16 @@ class ProductModel extends BaseModel {
     return result[0] || null;
   }
 
-  static async getModelPriceHistory(modelName, categoryId = null) {
+  static async getModelPriceHistory(modelName, categoryId = null, startDate = null, maxPoints = null) {
     let baseQuery = `
       WITH model_listings AS (
-        SELECT DISTINCT l.id, l.listing_id, l.price_numeric, l.post_time
+        SELECT DISTINCT
+          l.id,
+          l.listing_id,
+          l.price_numeric AS price,
+          COALESCE(l.post_time, l.created_at) AS post_time,
+          l.is_sold,
+          l.sold_time
         FROM listings l
         JOIN listing_attributes la ON l.id = la.listing_id
         JOIN product_attributes pa ON la.attribute_id = pa.id`;
@@ -377,38 +383,88 @@ class ProductModel extends BaseModel {
       params.push(categoryId);
     }
 
+    if (startDate) {
+      whereConditions.push(`COALESCE(l.post_time, l.created_at) >= $${params.length + 1}`);
+      params.push(startDate);
+    }
+
     baseQuery += `\n        WHERE ${whereConditions.join(' AND ')}`;
     
+    let limitClause = '';
+    if (Number.isFinite(Number(maxPoints)) && Number(maxPoints) > 0) {
+      params.push(Number(maxPoints));
+      limitClause = `\n      LIMIT $${params.length}`;
+    }
+
     const fullQuery = `
       ${baseQuery}
       )
-      SELECT 
+      SELECT
+        ml.id,
         ml.listing_id,
-        ml.price_numeric as price,
+        ml.price,
         ml.post_time,
-        
-        -- All attributes for this listing as JSON object
-        JSON_OBJECT_AGG(
-          pa.name, 
-          COALESCE(
-            la.value_text,
-            la.value_integer::text,
-            la.value_decimal::text,
-            la.value_boolean::text
-          )
-        ) FILTER (WHERE pa.name NOT IN ('Model', 'Brand') AND (
-          la.value_text IS NOT NULL OR 
-          la.value_integer IS NOT NULL OR 
-          la.value_decimal IS NOT NULL OR 
-          la.value_boolean IS NOT NULL
-        )) AS attributes
-
+        ml.is_sold,
+        ml.sold_time
       FROM model_listings ml
-      LEFT JOIN listing_attributes la ON ml.id = la.listing_id
-      LEFT JOIN product_attributes pa ON la.attribute_id = pa.id
-      GROUP BY ml.listing_id, ml.price_numeric, ml.post_time
-      ORDER BY ml.post_time ASC`;
+      WHERE ml.post_time IS NOT NULL
+      ORDER BY ml.post_time ASC, ml.id ASC${limitClause}`;
 
+    return await this.executeQuery(fullQuery, params);
+  }
+
+  static async getModelPriceHistoryByKey(modelKey, categoryId = null, startDate = null, maxPoints = null) {
+    let baseQuery = `
+      WITH model_listings AS (
+        SELECT DISTINCT
+          l.id,
+          l.listing_id,
+          l.price_numeric AS price,
+          COALESCE(l.post_time, l.created_at) AS post_time,
+          l.is_sold,
+          l.sold_time
+        FROM listings l
+        JOIN listing_attributes la ON l.id = la.listing_id
+        JOIN product_attributes pa ON la.attribute_id = pa.id`;
+    const params = [modelKey];
+    let whereConditions = [
+      `pa.name = 'model_key'`,
+      `la.value_text = $1`,
+      `l.status = 'success'`,
+      `l.price_numeric IS NOT NULL`
+    ];
+    if (categoryId) {
+      baseQuery += `\n        JOIN listing_categories lc ON l.id = lc.listing_id`;
+      whereConditions.push(`lc.category_id = $${params.length + 1}`);
+      params.push(categoryId);
+    }
+
+    if (startDate) {
+      whereConditions.push(`COALESCE(l.post_time, l.created_at) >= $${params.length + 1}`);
+      params.push(startDate);
+    }
+
+    baseQuery += `\n        WHERE ${whereConditions.join(' AND ')}`;
+
+    let limitClause = '';
+    if (Number.isFinite(Number(maxPoints)) && Number(maxPoints) > 0) {
+      params.push(Number(maxPoints));
+      limitClause = `\n      LIMIT $${params.length}`;
+    }
+
+    const fullQuery = `
+      ${baseQuery}
+      )
+      SELECT
+        ml.id,
+        ml.listing_id,
+        ml.price,
+        ml.post_time,
+        ml.is_sold,
+        ml.sold_time
+      FROM model_listings ml
+      WHERE ml.post_time IS NOT NULL
+      ORDER BY ml.post_time ASC, ml.id ASC${limitClause}`;
     return await this.executeQuery(fullQuery, params);
   }
 }

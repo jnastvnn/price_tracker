@@ -1,4 +1,5 @@
 import { param, query, validationResult } from 'express-validator';
+import ResponseFormatter from '../utils/ResponseFormatter.js';
 
 // Validation error handler
 export const handleValidationErrors = (req, res, next) => {
@@ -12,12 +13,7 @@ export const handleValidationErrors = (req, res, next) => {
       location: error.location
     }));
     
-    return res.status(400).json({
-      error: 'Validation failed',
-      message: 'Invalid input data provided',
-      details: formattedErrors,
-      timestamp: new Date().toISOString()
-    });
+    return ResponseFormatter.validationError(res, formattedErrors);
   }
   
   next();
@@ -127,6 +123,12 @@ export const validateModelsQuery = [
     .isInt({ min: 1 })
     .withMessage('Category ID must be a positive integer')
     .toInt(),
+
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page must be a positive integer')
+    .toInt(),
   
   query('limit')
     .optional()
@@ -141,6 +143,12 @@ export const validateBrandsQuery = [
   param('id')
     .isInt({ min: 1 })
     .withMessage('Category ID must be a positive integer')
+    .toInt(),
+
+  query('page')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('Page must be a positive integer')
     .toInt(),
   
   query('limit')
@@ -177,15 +185,13 @@ export const validatePriceRange = (req, res, next) => {
   const { minPrice, maxPrice } = req.query;
   
   if (minPrice && maxPrice && parseFloat(minPrice) > parseFloat(maxPrice)) {
-    return res.status(400).json({
-      error: 'Validation failed',
-      message: 'Minimum price cannot be greater than maximum price',
-      details: [{
+    return ResponseFormatter.validationError(res, [
+      {
         field: 'priceRange',
-        message: 'Invalid price range',
+        message: 'Minimum price cannot be greater than maximum price',
         value: { minPrice, maxPrice }
-      }]
-    });
+      }
+    ]);
   }
   
   next();
@@ -220,3 +226,108 @@ export const sanitizeInput = (req, res, next) => {
   
   next();
 }; 
+
+export const validateBrandCoordinatesQuery = [
+  query('categoryId')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('categoryId must be a positive integer')
+    .toInt(),
+
+  query('south')
+    .optional()
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('south must be a valid latitude between -90 and 90')
+    .toFloat(),
+
+  query('west')
+    .optional()
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('west must be a valid longitude between -180 and 180')
+    .toFloat(),
+
+  query('north')
+    .optional()
+    .isFloat({ min: -90, max: 90 })
+    .withMessage('north must be a valid latitude between -90 and 90')
+    .toFloat(),
+
+  query('east')
+    .optional()
+    .isFloat({ min: -180, max: 180 })
+    .withMessage('east must be a valid longitude between -180 and 180')
+    .toFloat(),
+
+  query('startDate')
+    .optional()
+    .isISO8601()
+    .withMessage('startDate must be a valid ISO-8601 timestamp'),
+
+  query('endDate')
+    .optional()
+    .isISO8601()
+    .withMessage('endDate must be a valid ISO-8601 timestamp'),
+
+  query('minCount')
+    .optional()
+    .isInt({ min: 1, max: 25 })
+    .withMessage('minCount must be between 1 and 25')
+    .toInt(),
+
+  query('limit')
+    .optional()
+    .isInt({ min: 1, max: 20000 })
+    .withMessage('limit must be between 1 and 20000')
+    .toInt(),
+
+  (req, res, next) => {
+    const { south, west, north, east, startDate, endDate } = req.query;
+    const hasAnyBound = [south, west, north, east].some((value) => value !== undefined);
+    const hasAllBounds = [south, west, north, east].every((value) => value !== undefined);
+
+    if (hasAnyBound && !hasAllBounds) {
+      return ResponseFormatter.validationError(res, [
+        {
+          field: 'viewport',
+          message: 'south, west, north and east must be provided together',
+          value: { south, west, north, east }
+        }
+      ]);
+    }
+
+    if (hasAllBounds) {
+      if (north <= south) {
+        return ResponseFormatter.validationError(res, [
+          {
+            field: 'viewport',
+            message: 'north must be greater than south',
+            value: { south, north }
+          }
+        ]);
+      }
+      if (east <= west) {
+        return ResponseFormatter.validationError(res, [
+          {
+            field: 'viewport',
+            message: 'east must be greater than west',
+            value: { west, east }
+          }
+        ]);
+      }
+    }
+
+    if (startDate && endDate && new Date(startDate).getTime() >= new Date(endDate).getTime()) {
+      return ResponseFormatter.validationError(res, [
+        {
+          field: 'dateRange',
+          message: 'startDate must be earlier than endDate',
+          value: { startDate, endDate }
+        }
+      ]);
+    }
+
+    next();
+  },
+
+  handleValidationErrors,
+];

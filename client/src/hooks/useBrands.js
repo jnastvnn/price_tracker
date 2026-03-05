@@ -1,13 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-
-const api = axios.create({
-    baseURL: '/api',
-    timeout: 10000,
-    headers: {
-        'Content-Type': 'application/json',
-    },
-}); 
+import { api } from '../utils/api'; 
 
 export const useBrands = (params = {}) => {
     const { id } = params;
@@ -36,7 +28,6 @@ export const useBrands = (params = {}) => {
             // Handle new API response format
             if (response.data.success) {
                 setState(prev => ({ ...prev, brands: response.data.data, loading: false }));
-                console.log(response.data.data);
             } else {
                 // Handle API error response
                 setState(prev => ({ 
@@ -49,12 +40,7 @@ export const useBrands = (params = {}) => {
             console.error('Error fetching brands:', error);
             
             // Handle different error types
-            let errorMessage = 'Failed to fetch brands';
-            if (error.response?.data?.error) {
-                errorMessage = error.response.data.error;
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
+            const errorMessage = error.message || 'Failed to fetch brands';
             
             setState(prev => ({ 
                 ...prev, 

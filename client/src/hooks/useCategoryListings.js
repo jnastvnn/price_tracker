@@ -1,16 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-
-const api = axios.create({
-  baseURL: '/api',
-  timeout: 10000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+import { api } from '../utils/api';
 
 export const useCategoryListings = (categoryId, options = {}) => {
-  const { page = 1, limit = 10, search = '', brands = [] } = options;
+  const { page = 1, limit = 10, search = '' } = options;
   const [state, setState] = useState({
     listings: [],
     loading: false,
@@ -37,11 +29,10 @@ export const useCategoryListings = (categoryId, options = {}) => {
         category: numericCategoryId,
         page,
         limit,
-        ...(search && { search }),
-        ...(brands.length > 0 && { brands })
+        ...(search && { search })
       };
       
-      const response = await api.get('/listings', { params });
+      const response = await api.get('/listings/grouped-by-model-key', { params });
       
       // Handle new API response format
       if (response.data.success) {
@@ -64,12 +55,7 @@ export const useCategoryListings = (categoryId, options = {}) => {
       console.error('Error fetching category listings:', error);
       
       // Handle different error types
-      let errorMessage = 'Failed to fetch listings';
-      if (error.response?.data?.error) {
-        errorMessage = error.response.data.error;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
+      const errorMessage = error.message || 'Failed to fetch listings';
       
       setState(prev => ({
         ...prev,
@@ -77,7 +63,7 @@ export const useCategoryListings = (categoryId, options = {}) => {
         loading: false,
       }));
     }
-  }, [categoryId, page, limit, search, brands]);
+  }, [categoryId, page, limit, search]);
 
   useEffect(() => {
     fetchListings();

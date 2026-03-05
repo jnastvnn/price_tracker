@@ -1,15 +1,13 @@
 import express from 'express';
-import Brand from '../models/Brand.js';
 import asyncHandler from '../utils/asyncHandler.js';
+import BrandController from '../controllers/brand.controller.js';
+import { validateBrandCoordinatesQuery } from '../middleware/validation.js';
 
 const router = express.Router();
 
-router.get('/:brandName/prices', asyncHandler(async (req, res) => {
-  const { brandName } = req.params;
-  const { categoryId } = req.query;
-  const decodedBrandName = decodeURIComponent(brandName);
-  const priceHistory = await Brand.getBrandPriceHistory(decodedBrandName, categoryId);
-  res.json({ success: true, data: priceHistory });
-}));
+router.get('/:brandName/prices', asyncHandler(BrandController.prices));
+router.get('/:brandName/analytics', asyncHandler(BrandController.getAnalytics));
+router.get('/:brandName/coordinates', validateBrandCoordinatesQuery, asyncHandler(BrandController.getCoordinates));
+router.get('/:brandName/categories', asyncHandler(BrandController.getCategories));
 
 export default router; 
