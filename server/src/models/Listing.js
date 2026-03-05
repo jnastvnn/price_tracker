@@ -1,6 +1,6 @@
 import BaseModel from './BaseModel.js';
 import { ATTRIBUTE_IDS, ATTRIBUTE_NAMES, STATUS } from '../constants/index.js';
-import { buildPagination, normalizePagination } from '../utils/pagination.js';
+import { buildPagination, buildPaginationWithoutCount, normalizePagination } from '../utils/pagination.js';
 
 const normalizeArray = (value) => {
   if (!value) return [];
@@ -417,7 +417,8 @@ class Listing extends BaseModel {
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
     const joinClause = joins.join(' ');
 
-    const limitParam = add(limit);
+    const queryLimit = limit + 1;
+    const limitParam = add(queryLimit);
     const offsetParam = add(offset);
 
     const listingsQuery = `
@@ -428,23 +429,16 @@ class Listing extends BaseModel {
         ROUND(AVG(l.price_numeric)::numeric, 0) AS average_price
       FROM listings l ${joinClause} ${whereClause}
       GROUP BY la_model.value_text
-      ORDER BY listing_count DESC
+      ORDER BY listing_count DESC, model ASC
       LIMIT ${limitParam} OFFSET ${offsetParam}`;
-  
-    // Keep count query for pagination
-    const countQuery = `
-      SELECT COUNT(*) AS total FROM (
-        SELECT 1 FROM listings l ${joinClause} ${whereClause} GROUP BY la_model.value_text
-      ) grouped_results`;
-  
-    const [countResult, listingsResult] = await Promise.all([
-      this.executeCountQuery(countQuery, values.slice(0, -2)),
-      this.executeQuery(listingsQuery, values)
-    ]);
+
+    const listingsResult = await this.executeQuery(listingsQuery, values);
+    const hasNextPage = listingsResult.length > limit;
+    const listings = hasNextPage ? listingsResult.slice(0, limit) : listingsResult;
 
     return {
-      listings: listingsResult,
-      pagination: buildPagination(page, limit, countResult)
+      listings,
+      pagination: buildPaginationWithoutCount(page, limit, listings.length, hasNextPage)
     };
   }
 
@@ -462,7 +456,8 @@ class Listing extends BaseModel {
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
     const joinClause = joins.join(' ');
 
-    const limitParam = add(limit);
+    const queryLimit = limit + 1;
+    const limitParam = add(queryLimit);
     const offsetParam = add(offset);
 
     const listingsQuery = `
@@ -473,22 +468,16 @@ class Listing extends BaseModel {
         ROUND(AVG(l.price_numeric)::numeric, 0) AS average_price
       FROM listings l ${joinClause} ${whereClause}
       GROUP BY la_model_key.value_text
-      ORDER BY listing_count DESC
+      ORDER BY listing_count DESC, model_key ASC
       LIMIT ${limitParam} OFFSET ${offsetParam}`;
 
-    const countQuery = `
-      SELECT COUNT(*) AS total FROM (
-        SELECT 1 FROM listings l ${joinClause} ${whereClause} GROUP BY la_model_key.value_text
-      ) grouped_results`;
-
-    const [countResult, listingsResult] = await Promise.all([
-      this.executeCountQuery(countQuery, values.slice(0, -2)),
-      this.executeQuery(listingsQuery, values)
-    ]);
+    const listingsResult = await this.executeQuery(listingsQuery, values);
+    const hasNextPage = listingsResult.length > limit;
+    const listings = hasNextPage ? listingsResult.slice(0, limit) : listingsResult;
 
     return {
-      listings: listingsResult,
-      pagination: buildPagination(page, limit, countResult)
+      listings,
+      pagination: buildPaginationWithoutCount(page, limit, listings.length, hasNextPage)
     };
   }
 

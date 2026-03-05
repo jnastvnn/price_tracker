@@ -194,7 +194,9 @@ export const CategoryListings = ({ categoryId }) => {
 
           {pagination && (
             <div className="mb-4 text-sm text-gray-600">
-              Showing {listings.length} of {pagination.totalItems} grouped listings
+              {Number.isInteger(pagination.totalItems)
+                ? `Showing ${listings.length} of ${pagination.totalItems} grouped listings`
+                : `Showing ${listings.length} grouped listings`}
             </div>
           )}
 
@@ -214,7 +216,7 @@ export const CategoryListings = ({ categoryId }) => {
 
               {loading && <div className="text-center text-gray-500 py-6">Loading more listings...</div>}
 
-              {pagination && (
+              {pagination && (pagination.hasPrevPage || pagination.hasNextPage) && (
                 <div className="mt-8 flex items-center justify-center gap-3">
                   <button
                     onClick={() => handlePageChange(pagination.currentPage - 1)}
@@ -224,7 +226,9 @@ export const CategoryListings = ({ categoryId }) => {
                     Previous
                   </button>
                   <span className="text-sm text-gray-600">
-                    Page {pagination.currentPage} of {pagination.totalPages}
+                    {Number.isInteger(pagination.totalPages)
+                      ? `Page ${pagination.currentPage} of ${pagination.totalPages}`
+                      : `Page ${pagination.currentPage}`}
                   </span>
                   <button
                     onClick={() => handlePageChange(pagination.currentPage + 1)}

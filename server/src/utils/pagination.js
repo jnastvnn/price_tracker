@@ -27,3 +27,19 @@ export const buildPagination = (page, limit, totalItems) => {
     prevPage: page > 1 ? Number(page) - 1 : null
   };
 };
+
+// Pagination shape for expensive queries where exact total count is skipped.
+export const buildPaginationWithoutCount = (page, limit, returnedItems, hasNextPage) => {
+  return {
+    currentPage: parseInt(page, 10),
+    totalPages: null,
+    totalItems: null,
+    itemsPerPage: parseInt(limit, 10),
+    returnedItems: parseInt(returnedItems, 10),
+    hasNextPage,
+    hasPrevPage: page > 1,
+    nextPage: hasNextPage ? Number(page) + 1 : null,
+    prevPage: page > 1 ? Number(page) - 1 : null,
+    exactTotal: false
+  };
+};

@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { buildPagination, normalizePagination } from '../src/utils/pagination.js';
+import {
+  buildPagination,
+  buildPaginationWithoutCount,
+  normalizePagination,
+} from '../src/utils/pagination.js';
 
 test('normalizePagination uses defaults and clamps values', () => {
   const { page, limit, offset } = normalizePagination({ page: 0, limit: 1000 });
@@ -22,4 +26,13 @@ test('buildPagination returns navigation info', () => {
   assert.equal(pagination.totalPages, 4);
   assert.equal(pagination.hasNextPage, true);
   assert.equal(pagination.hasPrevPage, true);
+});
+
+test('buildPaginationWithoutCount returns next/prev metadata without totals', () => {
+  const pagination = buildPaginationWithoutCount(1, 12, 12, true);
+  assert.equal(pagination.totalPages, null);
+  assert.equal(pagination.totalItems, null);
+  assert.equal(pagination.hasNextPage, true);
+  assert.equal(pagination.hasPrevPage, false);
+  assert.equal(pagination.exactTotal, false);
 });
