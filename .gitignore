@@ -4,6 +4,7 @@
 # Keep this file tracked
 !.gitignore
 !docker-compose.yml
+!README.md
 
 # Explicitly ignore non-app directories
 scripts/
