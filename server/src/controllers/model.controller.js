@@ -149,6 +149,7 @@ function formatEmaSeries(rows, emaWindow = 30) {
 
     series.push({
       post_time: postedAt.toISOString(),
+      price: round2(price),
       listing_count: 1,
       sold_count: soldIso ? 1 : 0,
       is_sold: isSold,

@@ -16,6 +16,27 @@ const createParamStore = () => {
   return { values, add };
 };
 
+const attributeIdCache = new Map();
+
+const getAttributeIdByName = async (attributeName) => {
+  if (attributeIdCache.has(attributeName)) {
+    return attributeIdCache.get(attributeName);
+  }
+
+  const rows = await Listing.executeQuery(
+    'SELECT id FROM product_attributes WHERE name = $1 LIMIT 1',
+    [attributeName]
+  );
+
+  if (!rows[0]?.id) {
+    throw new Error(`Attribute not found: ${attributeName}`);
+  }
+
+  const attributeId = Number(rows[0].id);
+  attributeIdCache.set(attributeName, attributeId);
+  return attributeId;
+};
+
 const buildListingFilters = (filters, base = {}) => {
   const { values, add } = createParamStore();
   const joins = [...(base.joins || [])];
@@ -422,13 +443,31 @@ class Listing extends BaseModel {
     const offsetParam = add(offset);
 
     const listingsQuery = `
-      SELECT 
-        COALESCE(la_model.value_text, 'Unknown Model') AS model,
-        STRING_AGG(DISTINCT la_brand.value_text, ', ' ORDER BY la_brand.value_text) AS brands,
-        COUNT(l.id) AS listing_count,
-        ROUND(AVG(l.price_numeric)::numeric, 0) AS average_price
-      FROM listings l ${joinClause} ${whereClause}
-      GROUP BY la_model.value_text
+      WITH grouped_listings AS (
+        SELECT DISTINCT
+          l.id,
+          COALESCE(la_model.value_text, 'Unknown Model') AS model,
+          l.price_numeric
+        FROM listings l ${joinClause} ${whereClause}
+      ),
+      brand_agg AS (
+        SELECT
+          gl.model,
+          STRING_AGG(DISTINCT la_brand.value_text, ', ' ORDER BY la_brand.value_text) AS brands
+        FROM grouped_listings gl
+        LEFT JOIN listing_attributes la_brand
+          ON gl.id = la_brand.listing_id
+         AND la_brand.attribute_id = ${ATTRIBUTE_IDS.BRAND}
+        GROUP BY gl.model
+      )
+      SELECT
+        gl.model,
+        ba.brands,
+        COUNT(*) AS listing_count,
+        ROUND(AVG(gl.price_numeric)::numeric, 0) AS average_price
+      FROM grouped_listings gl
+      LEFT JOIN brand_agg ba ON ba.model = gl.model
+      GROUP BY gl.model, ba.brands
       ORDER BY listing_count DESC, model ASC
       LIMIT ${limitParam} OFFSET ${offsetParam}`;
 
@@ -443,15 +482,19 @@ class Listing extends BaseModel {
   }
 
   static async findListingsGroupedByModelKey(filters = {}) {
+    const modelKeyAttributeId = await getAttributeIdByName(ATTRIBUTE_NAMES.MODEL_KEY);
     const { page, limit, offset } = normalizePagination(filters);
     const base = {
       joins: [
-        'JOIN listing_attributes la_model_key ON l.id = la_model_key.listing_id',
-        `JOIN product_attributes pa_model_key ON pa_model_key.id = la_model_key.attribute_id AND pa_model_key.name = '${ATTRIBUTE_NAMES.MODEL_KEY}'`,
-        `LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = ${ATTRIBUTE_IDS.BRAND}`
+        `JOIN listing_attributes la_model_key ON l.id = la_model_key.listing_id AND la_model_key.attribute_id = ${modelKeyAttributeId}`
       ],
       where: ['la_model_key.value_text IS NOT NULL']
     };
+    if (normalizeArray(filters.brands).length > 0) {
+      base.joins.push(
+        `LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = ${ATTRIBUTE_IDS.BRAND}`
+      );
+    }
     const { joins, whereConditions, values, add } = buildListingFilters(filters, base);
     const whereClause = `WHERE ${whereConditions.join(' AND ')}`;
     const joinClause = joins.join(' ');
@@ -461,13 +504,19 @@ class Listing extends BaseModel {
     const offsetParam = add(offset);
 
     const listingsQuery = `
-      SELECT 
-        la_model_key.value_text AS model_key,
-        STRING_AGG(DISTINCT la_brand.value_text, ', ' ORDER BY la_brand.value_text) AS brands,
-        COUNT(l.id) AS listing_count,
-        ROUND(AVG(l.price_numeric)::numeric, 0) AS average_price
-      FROM listings l ${joinClause} ${whereClause}
-      GROUP BY la_model_key.value_text
+      WITH grouped_listings AS (
+        SELECT DISTINCT
+          l.id,
+          la_model_key.value_text AS model_key,
+          l.price_numeric
+        FROM listings l ${joinClause} ${whereClause}
+      )
+      SELECT
+        gl.model_key,
+        COUNT(*) AS listing_count,
+        ROUND(AVG(gl.price_numeric)::numeric, 0) AS average_price
+      FROM grouped_listings gl
+      GROUP BY gl.model_key
       ORDER BY listing_count DESC, model_key ASC
       LIMIT ${limitParam} OFFSET ${offsetParam}`;
 
@@ -561,6 +610,7 @@ class Listing extends BaseModel {
     const { modelKey, categoryId, minPrice, maxPrice } = filters;
     const { page, limit, offset } = normalizePagination(filters);
     const { values, add } = createParamStore();
+    const modelKeyAttributeId = await getAttributeIdByName(ATTRIBUTE_NAMES.MODEL_KEY);
 
     let query = `
       SELECT DISTINCT 
@@ -569,12 +619,9 @@ class Listing extends BaseModel {
         la_model.value_text as model,
         la_brand.value_text as brand
       FROM listings l
-      JOIN listing_attributes la_key ON l.id = la_key.listing_id
-      JOIN product_attributes pa_key ON pa_key.id = la_key.attribute_id AND pa_key.name = '${ATTRIBUTE_NAMES.MODEL_KEY}'
-      LEFT JOIN listing_attributes la_model ON l.id = la_model.listing_id
-      LEFT JOIN product_attributes pa_model ON pa_model.id = la_model.attribute_id AND pa_model.name = '${ATTRIBUTE_NAMES.MODEL}'
-      LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id
-      LEFT JOIN product_attributes pa_brand ON pa_brand.id = la_brand.attribute_id AND pa_brand.name = '${ATTRIBUTE_NAMES.BRAND}'`;
+      JOIN listing_attributes la_key ON l.id = la_key.listing_id AND la_key.attribute_id = ${modelKeyAttributeId}
+      LEFT JOIN listing_attributes la_model ON l.id = la_model.listing_id AND la_model.attribute_id = ${ATTRIBUTE_IDS.MODEL}
+      LEFT JOIN listing_attributes la_brand ON l.id = la_brand.listing_id AND la_brand.attribute_id = ${ATTRIBUTE_IDS.BRAND}`;
 
     const whereConditions = [
       `l.status = ${add(STATUS.SUCCESS)}`,
@@ -602,8 +649,7 @@ class Listing extends BaseModel {
     const countQuery = `
       SELECT COUNT(DISTINCT l.id) as total
       FROM listings l
-      JOIN listing_attributes la_key ON l.id = la_key.listing_id
-      JOIN product_attributes pa_key ON pa_key.id = la_key.attribute_id AND pa_key.name = '${ATTRIBUTE_NAMES.MODEL_KEY}'
+      JOIN listing_attributes la_key ON l.id = la_key.listing_id AND la_key.attribute_id = ${modelKeyAttributeId}
       ${categoryId ? 'JOIN listing_categories lc ON l.id = lc.listing_id' : ''}
       ${whereClause}`;
 

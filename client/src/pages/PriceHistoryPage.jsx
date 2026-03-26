@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Scatter, Bar, Legend, ReferenceLine } from 'recharts';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, Scatter, Bar, Legend, ReferenceLine, Area } from 'recharts';
 import { format, parseISO, subDays, startOfWeek, addWeeks, subWeeks } from 'date-fns';
 import { api } from '../utils/api';
 // Time range options
@@ -11,8 +11,6 @@ const TIME_RANGES = {
   ALL: { label: 'All time', days: null }
 };
 
-// Exponential Moving Average window (number of points)
-const EMA_WINDOW = 30;
 const PATIENCE_EMA_WINDOW = 7;
 const IMAGE_PLACEHOLDER = 'https://upload.wikimedia.org/wikipedia/commons/6/65/No-Image-Placeholder.svg';
 const CHART_MIN_START_TS = Date.parse('2025-08-20T00:00:00Z');
@@ -51,6 +49,69 @@ const removeOutliers = (points) => {
   return points.filter(p => p.price >= lower && p.price <= upper);
 };
 
+const weightedPercentile = (entries, p) => {
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  const sortedEntries = entries
+    .map(({ value, weight }) => ({
+      value: Number(value),
+      weight: Number.isFinite(Number(weight)) && Number(weight) > 0 ? Number(weight) : 1
+    }))
+    .filter(({ value }) => Number.isFinite(value))
+    .sort((a, b) => a.value - b.value);
+
+  if (sortedEntries.length === 0) return null;
+
+  const totalWeight = sortedEntries.reduce((sum, entry) => sum + entry.weight, 0);
+  const threshold = totalWeight * p;
+  let runningWeight = 0;
+
+  for (const entry of sortedEntries) {
+    runningWeight += entry.weight;
+    if (runningWeight >= threshold) {
+      return entry.value;
+    }
+  }
+
+  return sortedEntries[sortedEntries.length - 1].value;
+};
+
+const fitLogTrend = (points) => {
+  if (!Array.isArray(points) || points.length < 2) return null;
+
+  const minTimestamp = Math.min(...points.map((point) => point.timestamp));
+  let sumW = 0;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXX = 0;
+  let sumXY = 0;
+
+  for (const point of points) {
+    const price = Number(point.median_price);
+    if (!Number.isFinite(price) || price <= 0) continue;
+
+    const x = (point.timestamp - minTimestamp) / (1000 * 60 * 60 * 24);
+    const y = Math.log(price);
+    const weight = Number.isFinite(Number(point.listing_count)) && Number(point.listing_count) > 0
+      ? Number(point.listing_count)
+      : 1;
+
+    sumW += weight;
+    sumX += weight * x;
+    sumY += weight * y;
+    sumXX += weight * x * x;
+    sumXY += weight * x * y;
+  }
+
+  const denominator = sumW * sumXX - sumX * sumX;
+  if (sumW <= 0 || denominator === 0) return null;
+
+  const slope = (sumW * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / sumW;
+  if (!Number.isFinite(slope) || !Number.isFinite(intercept)) return null;
+
+  return { intercept, slope, minTimestamp };
+};
+
 export const PriceHistoryPage = () => {
   const { model } = useParams();
   const navigate = useNavigate();
@@ -64,8 +125,6 @@ export const PriceHistoryPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [timeRange, setTimeRange] = useState('ALL');
-  const [priceSeriesType, setPriceSeriesType] = useState(null);
-  const [backendEmaWindow, setBackendEmaWindow] = useState(null);
   const [backendPatienceSeries, setBackendPatienceSeries] = useState([]);
   const [categoryName, setCategoryName] = useState('');
   const [modelImageUrl, setModelImageUrl] = useState(null);
@@ -74,6 +133,22 @@ export const PriceHistoryPage = () => {
   const [targetDays, setTargetDays] = useState(7);
   const [selectedPricePoint, setSelectedPricePoint] = useState(null);
   const [selectedPatiencePoint, setSelectedPatiencePoint] = useState(null);
+
+  const priceTrendStats = useMemo(() => {
+    if (!Array.isArray(priceData) || priceData.length < 2) return null;
+    const first = priceData[0];
+    const last = priceData[priceData.length - 1];
+    if (!Number.isFinite(first?.trend_price) || !Number.isFinite(last?.trend_price) || first.timestamp === last.timestamp) {
+      return null;
+    }
+    if (first.trend_price <= 0) return null;
+
+    const totalChangePct = ((last.trend_price - first.trend_price) / first.trend_price) * 100;
+    return {
+      totalChangePct: Math.round(totalChangePct * 10) / 10,
+      fittedCurrentPrice: Math.round(last.trend_price)
+    };
+  }, [priceData]);
 
   const availableAttributes = useMemo(() => {
     if (!Array.isArray(rawPriceData) || rawPriceData.length === 0) return {};
@@ -171,29 +246,17 @@ export const PriceHistoryPage = () => {
       if (response.data.success && payload) {
         if (Array.isArray(payload)) {
           setRawPriceData(payload);
-          setPriceSeriesType(null);
-          setBackendEmaWindow(null);
           setBackendPatienceSeries([]);
         } else if (Array.isArray(payload.series)) {
           setRawPriceData(payload.series);
-          setPriceSeriesType(payload.series_type || 'daily_ema');
-          setBackendEmaWindow(
-            Number.isFinite(Number(payload.ema_window))
-              ? Number(payload.ema_window)
-              : null
-          );
           setBackendPatienceSeries(
             Array.isArray(payload.patience_0_14) ? payload.patience_0_14 : []
           );
         } else if (Array.isArray(payload.bins)) {
           setRawPriceData(payload.bins);
-          setPriceSeriesType(payload.bin_size || '1 day');
-          setBackendEmaWindow(null);
           setBackendPatienceSeries([]);
         } else {
           setRawPriceData([]);
-          setPriceSeriesType(null);
-          setBackendEmaWindow(null);
           setBackendPatienceSeries([]);
           setError('Price data format is invalid');
           return;
@@ -482,12 +545,12 @@ export const PriceHistoryPage = () => {
 
 	  const handlePriceChartClick = useCallback((chartState) => {
 	    const point = chartState?.activePayload?.[0]?.payload;
-	    if (!point || typeof point.timestamp !== 'number' || !Number.isFinite(point.price)) {
+	    if (!point || typeof point.date !== 'string' || !Number.isFinite(point.price)) {
 	      return;
 	    }
 	    setSelectedPricePoint((current) => {
-	      if (current && current.timestamp === point.timestamp) return null;
-	      return { timestamp: point.timestamp, price: point.price };
+	      if (current && current.date === point.date) return null;
+	      return { date: point.date, price: point.price };
 	    });
 	  }, []);
 
@@ -513,10 +576,9 @@ export const PriceHistoryPage = () => {
 	  }, []);
 
   const processData = useCallback((data) => {
-    // Map data to chart data format
-    let chartData = data.map(item => {
-      const emaValue = Number(item.ema_price ?? item.ema);
-      if (!Number.isFinite(emaValue)) return null;
+    let listingSeries = data.map(item => {
+      const rawPrice = Number(item.price ?? item.price_numeric ?? item.ema_price ?? item.ema);
+      if (!Number.isFinite(rawPrice) || rawPrice <= 0) return null;
 
       const timeValue = item.post_time || item.day || item.day_bin;
       if (!timeValue) return null;
@@ -533,64 +595,81 @@ export const PriceHistoryPage = () => {
       const listingCountRaw = Number(item.listing_count);
       const soldCountRaw = Number(item.sold_count);
       const listingCount = Number.isFinite(listingCountRaw) ? listingCountRaw : 1;
-      const soldCount = Number.isFinite(soldCountRaw) ? soldCountRaw : null;
-      const serverEma = emaValue;
+      const soldCount = Number.isFinite(soldCountRaw) ? soldCountRaw : 0;
 
       return {
-        date: format(postDate, 'yyyy-MM-dd'),
+        dayKey: format(postDate, 'yyyy-MM-dd'),
         timestamp: postDate.getTime(),
-        price: +emaValue.toFixed(2),
-        server_ema: serverEma,
-        post_time: postDate.toISOString(),
-        listing_id: item.listing_id || null,
-        attributes: item.attributes || null,
+        price: +rawPrice.toFixed(2),
         listing_count: listingCount,
         sold_count: soldCount,
-        min_price: null,
-        max_price: null,
-        median_price: null
       };
     }).filter(Boolean);
 
-    // Sort by date to ensure the line connects chronologically.
-    chartData.sort((a, b) => a.timestamp - b.timestamp);
+    listingSeries.sort((a, b) => a.timestamp - b.timestamp);
+    listingSeries = listingSeries.filter(item => item.timestamp >= CHART_MIN_START_TS);
 
-    // Enforce a fixed plot start date.
-    chartData = chartData.filter(item => item.timestamp >= CHART_MIN_START_TS);
-
-    // Apply time range filter if one is selected.
     if (TIME_RANGES[timeRange] && TIME_RANGES[timeRange].days) {
       const cutoffDate = subDays(new Date(), TIME_RANGES[timeRange].days).getTime();
-      chartData = chartData.filter(item => item.timestamp >= cutoffDate);
+      listingSeries = listingSeries.filter(item => item.timestamp >= cutoffDate);
     }
 
-    const hasServerEma = chartData.some((point) => Number.isFinite(point.server_ema));
-    if (!hasServerEma) {
-      chartData = removeOutliers(chartData);
+    listingSeries = removeOutliers(listingSeries);
+
+    const groupedByDay = new Map();
+    for (const point of listingSeries) {
+      if (!groupedByDay.has(point.dayKey)) groupedByDay.set(point.dayKey, []);
+      groupedByDay.get(point.dayKey).push(point);
     }
 
-    if (hasServerEma) {
-      chartData = chartData.map((point) => ({
-        ...point,
-        ema: Number.isFinite(point.server_ema) ? +point.server_ema.toFixed(2) : null
+    let chartData = Array.from(groupedByDay.entries()).map(([dayKey, points]) => {
+      const weightedPrices = points.map((point) => ({
+        value: point.price,
+        weight: point.listing_count
       }));
-    } else if (chartData.length > 0) {
-      // Compute fallback EMA on the frontend when backend EMA is unavailable.
-      const smoothing = 2 / (EMA_WINDOW + 1);
-      let emaValue = chartData[0].price; // seed with first price
-      chartData = chartData.map((point, index) => {
-        if (index === 0) {
-          return { ...point, ema: +emaValue.toFixed(2) };
-        }
-        emaValue = point.price * smoothing + emaValue * (1 - smoothing);
-        return { ...point, ema: +emaValue.toFixed(2) };
+      const q1 = weightedPercentile(weightedPrices, 0.25);
+      const median = weightedPercentile(weightedPrices, 0.5);
+      const q3 = weightedPercentile(weightedPrices, 0.75);
+      const minPrice = Math.min(...points.map((point) => point.price));
+      const maxPrice = Math.max(...points.map((point) => point.price));
+      const listingCount = points.reduce((sum, point) => sum + point.listing_count, 0);
+      const soldCount = points.reduce((sum, point) => sum + point.sold_count, 0);
+      const dayDate = parseISO(`${dayKey}T00:00:00Z`);
+
+      return {
+        date: dayKey,
+        timestamp: dayDate.getTime(),
+        post_time: dayDate.toISOString(),
+        listing_count: listingCount,
+        sold_count: soldCount,
+        min_price: Number.isFinite(minPrice) ? +minPrice.toFixed(2) : null,
+        max_price: Number.isFinite(maxPrice) ? +maxPrice.toFixed(2) : null,
+        q1_price: Number.isFinite(q1) ? +q1.toFixed(2) : null,
+        median_price: Number.isFinite(median) ? +median.toFixed(2) : null,
+        q3_price: Number.isFinite(q3) ? +q3.toFixed(2) : null,
+        iqr_band: Number.isFinite(q1) && Number.isFinite(q3) ? +(q3 - q1).toFixed(2) : null,
+        price: Number.isFinite(median) ? +median.toFixed(2) : null
+      };
+    }).filter((point) => Number.isFinite(point.median_price));
+
+    chartData.sort((a, b) => a.timestamp - b.timestamp);
+
+    const trendModel = fitLogTrend(chartData);
+    if (trendModel) {
+      chartData = chartData.map((point) => {
+        const x = (point.timestamp - trendModel.minTimestamp) / (1000 * 60 * 60 * 24);
+        const trendPrice = Math.exp(trendModel.intercept + trendModel.slope * x);
+        return {
+          ...point,
+          trend_price: Number.isFinite(trendPrice) ? +trendPrice.toFixed(2) : null
+        };
       });
     }
 
     chartData = downsampleByStride(chartData, MAX_CHART_POINTS);
 
     setPriceData(chartData);
-  }, [availableAttributes, timeRange]);
+  }, [timeRange]);
 
   // Effect for processing raw data (runs when rawPriceData or timeRange change)
   useEffect(() => {
@@ -607,7 +686,7 @@ export const PriceHistoryPage = () => {
     let weightedSum = 0;
     let totalWeight = 0;
     for (const item of filteredRaw) {
-      const price = parseFloat(item.ema_price ?? item.ema);
+      const price = parseFloat(item.price ?? item.price_numeric ?? item.ema_price ?? item.ema);
       if (!Number.isFinite(price)) continue;
       const candidateWeight = Number(item.listing_count);
       const weight = Number.isFinite(candidateWeight) && candidateWeight > 0 ? candidateWeight : 1;
@@ -749,58 +828,59 @@ export const PriceHistoryPage = () => {
   }), []);
 
   const formatXAxisTick = (value) => {
+    if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return format(parseISO(`${value}T00:00:00Z`), 'MMM d');
+    }
     if (typeof value === 'number') {
       return format(new Date(value), 'MMM d');
     }
-    return format(new Date(value), 'MMM d');
+    return String(value);
   };
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       const timestamp = data.post_time ? parseISO(data.post_time) : new Date(data.timestamp);
-      const hasListingId = data.listing_id !== null && data.listing_id !== undefined;
       const listingCount = Number(data.listing_count);
       const soldCount = Number(data.sold_count);
       const minPrice = Number(data.min_price);
       const maxPrice = Number(data.max_price);
+      const medianPrice = Number(data.median_price);
+      const trendPrice = Number(data.trend_price);
+      const q1Price = Number(data.q1_price);
+      const q3Price = Number(data.q3_price);
       return (
         <div className="custom-tooltip">
-          <p className="label">{format(timestamp, 'MMM d, yyyy HH:mm')}</p>
-          {hasListingId && (
-            <p style={{ fontSize: '12px', color: '#007bff', fontWeight: 'bold' }}>ID: {data.listing_id}</p>
-          )}
-          {!hasListingId && Number.isFinite(listingCount) && (
+          <p className="label">{format(timestamp, 'MMM d, yyyy')}</p>
+          {Number.isFinite(listingCount) && (
             <p style={{ fontSize: '12px', color: '#007bff', fontWeight: 'bold' }}>
               Listings: {listingCount}
             </p>
           )}
-          <p style={{ color: '#8884d8' }}>
-            EMA: €{data.price}
-          </p>
-          {!hasListingId && Number.isFinite(minPrice) && Number.isFinite(maxPrice) && (
-            <p style={{ fontSize: '12px', color: '#666' }}>
-              Range: €{Math.round(minPrice)} - €{Math.round(maxPrice)}
+          {Number.isFinite(medianPrice) && (
+            <p style={{ color: '#1459c7' }}>
+              Daily median: €{Math.round(medianPrice)}
             </p>
           )}
-          {!hasListingId && Number.isFinite(soldCount) && (
+          {Number.isFinite(trendPrice) && (
+            <p style={{ color: '#ef4444' }}>
+              Fitted trend: €{Math.round(trendPrice)}
+            </p>
+          )}
+          {Number.isFinite(q1Price) && Number.isFinite(q3Price) && (
+            <p style={{ fontSize: '12px', color: '#666' }}>
+              Mid 50%: €{Math.round(q1Price)} - €{Math.round(q3Price)}
+            </p>
+          )}
+          {Number.isFinite(minPrice) && Number.isFinite(maxPrice) && (
+            <p style={{ fontSize: '12px', color: '#666' }}>
+              Full range: €{Math.round(minPrice)} - €{Math.round(maxPrice)}
+            </p>
+          )}
+          {Number.isFinite(soldCount) && (
             <p style={{ fontSize: '12px', color: '#666' }}>
               Sold: {soldCount}
             </p>
-          )}
-          {typeof data.ema === 'number' && (
-            <p style={{ color: '#ef4444' }}>
-              EMA (smoothed): €{data.ema}
-            </p>
-          )}
-          {data.attributes && Object.keys(data.attributes).length > 0 && (
-            <div className="attributes">
-              {Object.entries(data.attributes).map(([key, value]) => (
-                <p key={key} style={{ fontSize: '12px', color: '#666' }}>
-                  {key}: {value}
-                </p>
-              ))}
-            </div>
           )}
         </div>
       );
@@ -850,37 +930,37 @@ export const PriceHistoryPage = () => {
   };
 
   if (loading) {
-    return <div className="min-h-screen grid place-items-center text-gray-600">Loading price history...</div>;
+    return <div className="app-shell app-loading">Loading price history...</div>;
   }
 
   if (error) {
     return (
-      <div className="min-h-screen grid place-items-center p-4">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-6 max-w-md text-center">
-          <div className="text-red-800 font-semibold mb-2">Error</div>
-          <div className="text-red-600 mb-4">{error}</div>
-          <button onClick={() => navigate(-1)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Go Back</button>
+      <div className="app-shell app-error">
+        <div className="app-error-box">
+          <div className="font-semibold mb-2 text-[var(--landing-text-strong)]">Error</div>
+          <div className="app-muted mb-4">{error}</div>
+          <button onClick={() => navigate(-1)} className="app-btn">Go Back</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="app-shell">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-200/60">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">← Back</button>
-          <h1 className="text-2xl font-bold text-gray-900">Price History</h1>
+      <div className="app-header">
+        <div className="app-container app-header-row">
+          <button onClick={() => navigate(-1)} className="app-btn">← Back</button>
+          <h1 className="text-2xl font-bold text-[var(--landing-text-strong)]">Price History</h1>
         </div>
       </div>
 
       {/* Model title */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        <div className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md">
-          <h2 className="text-2xl md:text-3xl font-bold text-gray-900 mb-6">
+      <div className="app-container px-4 py-6">
+        <div className="app-panel p-6">
+          <h2 className="text-2xl md:text-3xl font-bold text-[var(--landing-text-strong)] mb-6">
             {productInfo?.canonical_name || model}
-            {productInfo?.brand_name ? <span className="text-gray-600 text-xl"> • {productInfo.brand_name}</span> : null}
+            {productInfo?.brand_name ? <span className="app-muted text-xl"> • {productInfo.brand_name}</span> : null}
           </h2>
 
           {/* Image + Average price row */}
@@ -903,17 +983,18 @@ export const PriceHistoryPage = () => {
             </div>
 
             <div className="w-full">
-              <div className="rounded-xl border border-gray-200 p-6 bg-white">
+              <div className="app-panel p-6">
                 <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
                   <div>
                     <div className="text-gray-500 text-sm">Average price</div>
                     <div className="text-3xl font-bold text-gray-900 mt-1">{averagePrice !== null ? formatCurrency.format(averagePrice) : '–'}</div>
-                    <div className="mt-3 text-sm text-gray-500">{priceData.length} data point{priceData.length !== 1 ? 's' : ''}</div>
-                    {priceSeriesType && (
-                      <div className="mt-1 text-sm text-gray-500">
-                        Series: {priceSeriesType}
-                        {backendEmaWindow ? ` (EMA window ${backendEmaWindow})` : ''}
-                        {` • ${totalListingsRepresented} listings`}
+                    <div className="mt-3 text-sm text-gray-500">{priceData.length} daily bin{priceData.length !== 1 ? 's' : ''}</div>
+                    <div className="mt-1 text-sm text-gray-500">
+                      Series: daily median + fitted trend • {totalListingsRepresented} listings
+                    </div>
+                    {priceTrendStats && (
+                      <div className="mt-1 text-sm text-gray-600">
+                        Fitted current price: {formatCurrency.format(priceTrendStats.fittedCurrentPrice)} • Trend: {priceTrendStats.totalChangePct > 0 ? '+' : ''}{priceTrendStats.totalChangePct}%
                       </div>
                     )}
                     {sellThroughRates && (
@@ -965,19 +1046,15 @@ export const PriceHistoryPage = () => {
       </div>
 
       {/* Time range controls */}
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Time Range</h3>
+      <div className="app-container px-4">
+        <div className="app-panel p-6 mb-6">
+          <h3 className="text-lg font-semibold text-[var(--landing-text-strong)] mb-3">Time Range</h3>
           <div className="flex flex-wrap gap-2">
             {Object.entries(TIME_RANGES).map(([key, range]) => (
               <button
                 key={key}
                 onClick={() => setTimeRange(key)}
-                className={`px-4 py-2 rounded-lg border text-sm transition-colors ${
-                  timeRange === key
-                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                }`}
+                className={`app-btn ${timeRange === key ? 'app-btn-active' : ''}`}
               >
                 {range.label}
               </button>
@@ -989,7 +1066,7 @@ export const PriceHistoryPage = () => {
               <select
                 value={conditionFilter}
                 onChange={(e) => setConditionFilter(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                className="app-select"
               >
                 <option value="">All</option>
                 {conditionOptions.map(opt => (
@@ -1002,18 +1079,17 @@ export const PriceHistoryPage = () => {
       </div>
 
       {/* Chart */}
-      <div className="max-w-7xl mx-auto px-4 pb-10">
-        <section className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md">
+      <div className="app-container px-4 pb-10">
+        <section className="app-panel p-6">
 	          <ResponsiveContainer width="100%" height={400}>
-	            <LineChart data={priceData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }} onClick={handlePriceChartClick}>
+	            <ComposedChart data={priceData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }} onClick={handlePriceChartClick}>
 	              <CartesianGrid stroke="#e5e7eb" strokeDasharray="4 4" />
 	              <XAxis 
-	                type="number"
-	                dataKey="timestamp"
+	                type="category"
+	                dataKey="date"
                 tickFormatter={formatXAxisTick}
-                domain={['dataMin', 'dataMax']}
-                tickCount={6}
                 interval="preserveStartEnd"
+                  minTickGap={24}
               />
               <YAxis 
                 tickFormatter={(value) => `€${value}`}
@@ -1027,7 +1103,7 @@ export const PriceHistoryPage = () => {
 	              {selectedPricePoint && (
 	                <>
 	                  <ReferenceLine
-	                    x={selectedPricePoint.timestamp}
+	                    x={selectedPricePoint.date}
 	                    stroke="#111827"
 	                    strokeDasharray="3 3"
 	                    strokeWidth={1}
@@ -1040,16 +1116,44 @@ export const PriceHistoryPage = () => {
 	                  />
 	                </>
 	              )}
+                <Area
+                  type="monotone"
+                  dataKey="q1_price"
+                  stackId="price-band"
+                  stroke="none"
+                  fill="transparent"
+                  isAnimationActive={false}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="iqr_band"
+                  stackId="price-band"
+                  stroke="none"
+                  fill="rgba(20, 89, 199, 0.12)"
+                  name="Middle 50%"
+                  isAnimationActive={false}
+                />
 	              <Line 
 	                type="monotone" 
-	                dataKey="ema" 
-	                stroke="#ef4444" 
-	                name="EMA"
+	                dataKey="median_price" 
+	                stroke="#1459c7" 
+	                name="Daily median"
 	                strokeWidth={3}
 	                dot={false}
 	                connectNulls
               />
-            </LineChart>
+	              <Line 
+	                type="monotone" 
+	                dataKey="trend_price" 
+	                stroke="#ef4444" 
+	                name="Fitted trend"
+	                strokeWidth={2}
+	                dot={false}
+	                connectNulls
+                  strokeDasharray="6 4"
+              />
+              <Legend />
+            </ComposedChart>
           </ResponsiveContainer>
           {productInfo?.specs && Object.keys(productInfo.specs).length > 0 && (
             <div className="mt-6">
@@ -1068,10 +1172,10 @@ export const PriceHistoryPage = () => {
       </div>
 
       {/* Liquidity insights */}
-      <div className="max-w-7xl mx-auto px-4 pb-12">
+      <div className="app-container px-4 pb-12">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-	          <section className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md">
-	            <h3 className="text-lg font-semibold text-gray-900 mb-4">Price vs. Patience</h3>
+	          <section className="app-panel p-6">
+	            <h3 className="text-lg font-semibold text-[var(--landing-text-strong)] mb-4">Price vs. Patience</h3>
 	            {patienceChartSeries.length === 0 ? (
 	              <div className="text-sm text-gray-600">Not enough sold listings to estimate the curve yet.</div>
 	            ) : (
@@ -1099,9 +1203,9 @@ export const PriceHistoryPage = () => {
 	                        className="w-full accent-blue-600"
 	                      />
 	                    </div>
-	                    <div className="rounded-xl border border-gray-200 bg-white p-4 mb-4">
+	                    <div className="app-panel-soft p-4 mb-4">
 	                      <div className="text-sm text-gray-500">Recommended price</div>
-	                      <div className="text-2xl font-bold text-gray-900">
+	                      <div className="text-2xl font-bold text-[var(--landing-text-strong)]">
 	                        {recommendedPrice ? formatCurrency.format(recommendedPrice) : '–'}
 	                      </div>
 	                      {tradeoffInsight && (
@@ -1165,8 +1269,8 @@ export const PriceHistoryPage = () => {
             )}
           </section>
 
-          <section className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Market Velocity</h3>
+          <section className="app-panel p-6">
+            <h3 className="text-lg font-semibold text-[var(--landing-text-strong)] mb-4">Market Velocity</h3>
             {velocitySeries.length === 0 ? (
               <div className="text-sm text-gray-600">Not enough sold listings to show velocity yet.</div>
             ) : (

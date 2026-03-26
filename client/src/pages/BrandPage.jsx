@@ -127,10 +127,10 @@ export const BrandPage = () => {
   // Loading and error states
   if (loadingCategories || loadingAnalytics || !selectedCategory) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="text-center">
+      <div className="app-shell app-loading">
+        <div className="text-center app-panel p-6">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading analytics...</p>
+          <p className="app-muted">Loading analytics...</p>
         </div>
       </div>
     );
@@ -138,10 +138,10 @@ export const BrandPage = () => {
 
   if (errorAnalytics) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-red-600 mb-4">Error: {errorAnalytics}</p>
-          <button onClick={() => navigate(-1)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
+      <div className="app-shell app-error">
+        <div className="app-error-box">
+          <p className="mb-4">Error: {errorAnalytics}</p>
+          <button onClick={() => navigate(-1)} className="app-btn">
             ← Go Back
           </button>
         </div>
@@ -151,10 +151,10 @@ export const BrandPage = () => {
 
   if (!data || categories.length === 0) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50 flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">{categories.length === 0 ? 'No categories found for this brand' : 'No data available'}</p>
-          <button onClick={() => navigate(-1)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">
+      <div className="app-shell app-empty">
+        <div className="app-panel p-6">
+          <p className="app-muted mb-4">{categories.length === 0 ? 'No categories found for this brand' : 'No data available'}</p>
+          <button onClick={() => navigate(-1)} className="app-btn">
             ← Go Back
           </button>
         </div>
@@ -166,25 +166,25 @@ export const BrandPage = () => {
   const pieBackground = `conic-gradient(#60a5fa 0 ${marketShare}%, #e5e7eb ${marketShare}% 100%)`;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-purple-50">
+    <div className="app-shell">
       {/* Header */}
-      <div className="bg-white/80 backdrop-blur-md border-b border-gray-200/60">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">← Back</button>
-          <h1 className="text-2xl font-bold text-gray-900">Brand Analytics</h1>
+      <div className="app-header">
+        <div className="app-container app-header-row">
+          <button onClick={() => navigate(-1)} className="app-btn">← Back</button>
+          <h1 className="text-2xl font-bold text-[var(--landing-text-strong)]">Brand Analytics</h1>
         </div>
       </div>
 
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className="app-container px-4 py-6">
         {/* Brand title card with category dropdown */}
-        <div className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md mb-6">
+        <div className="app-panel p-6 mb-6">
           <div className="flex flex-col md:flex-row md:items-center gap-4">
-            <h2 className="text-2xl md:text-3xl font-bold text-gray-900">
+            <h2 className="text-2xl md:text-3xl font-bold text-[var(--landing-text-strong)]">
               {data.brand_name} in{' '}
               <select
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="inline-block px-4 py-2 border-2 border-blue-300 rounded-lg text-2xl md:text-3xl font-bold text-blue-600 bg-white hover:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-colors"
+                className="app-select inline-block text-2xl md:text-3xl font-bold text-[var(--landing-text-strong)]"
               >
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
@@ -196,25 +196,25 @@ export const BrandPage = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left: Models list */}
-          <section className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md flex flex-col">
+          <section className="app-panel p-6 flex flex-col">
             <div className="mb-4">
-              <h3 className="text-xl font-bold text-gray-900 mb-1">Popular Models</h3>
-              <p className="text-sm text-gray-500">Average price and time to sell</p>
+              <h3 className="text-xl font-bold text-[var(--landing-text-strong)] mb-1">Popular Models</h3>
+              <p className="text-sm app-muted">Average price and time to sell</p>
             </div>
             <div className="space-y-4 overflow-y-auto pr-2" style={{ maxHeight: '800px' }}>
               {data.models.length > 0 ? (
                 data.models.map((m, index) => (
                   <div 
                     key={m.model || index} 
-                    className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-gray-50 to-white border border-gray-200 hover:shadow-md transition-shadow"
+                    className="app-panel-soft flex items-center justify-between p-4"
                   >
                     <div className="flex items-center gap-4 flex-1">
-                      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-semibold text-sm">
+                      <div className="flex items-center justify-center w-8 h-8 border border-[var(--landing-border)] text-[var(--landing-text-strong)] font-semibold text-sm">
                         {index + 1}
                       </div>
                       <div className="flex-1">
-                        <div className="font-semibold text-gray-900">{m.model || 'Unknown'}</div>
-                        <div className="text-sm text-gray-500 mt-1">
+                        <div className="font-semibold text-[var(--landing-text-strong)]">{m.model || 'Unknown'}</div>
+                        <div className="text-sm app-muted mt-1">
                           <span className="inline-flex items-center gap-1">
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -225,13 +225,13 @@ export const BrandPage = () => {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-gray-900 tabular-nums">€{parseFloat(m.avg_price || 0).toFixed(0)}</div>
-                      <div className="text-xs text-gray-500">avg price</div>
+                      <div className="text-2xl font-bold text-[var(--landing-text-strong)] tabular-nums">€{parseFloat(m.avg_price || 0).toFixed(0)}</div>
+                      <div className="text-xs app-muted">avg price</div>
                     </div>
                   </div>
                 ))
               ) : (
-                <p className="text-gray-500 text-center py-4">No models found</p>
+                <p className="app-muted text-center py-4">No models found</p>
               )}
             </div>
           </section>
@@ -239,8 +239,8 @@ export const BrandPage = () => {
           {/* Right column */}
           <div className="space-y-6">
             {/* Market position */}
-            <section className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-6">Market position</h3>
+            <section className="app-panel p-6">
+              <h3 className="text-lg font-semibold text-[var(--landing-text-strong)] mb-6">Market position</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                 <div>
                   <div className="text-sm text-gray-600 mb-1">Brand avg price</div>
@@ -266,8 +266,8 @@ export const BrandPage = () => {
             </section>
 
             {/* Condition breakdown */}
-            <section className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Condition breakdown</h3>
+            <section className="app-panel p-6">
+              <h3 className="text-lg font-semibold text-[var(--landing-text-strong)] mb-4">Condition breakdown</h3>
               <div className="space-y-4">
                 {/* Visual bar */}
                 <div className="w-full h-6 rounded overflow-hidden flex">
@@ -288,21 +288,21 @@ export const BrandPage = () => {
                     return (
                       <div 
                         key={c.condition} 
-                        className="flex items-center justify-between p-3 rounded-lg bg-gradient-to-r from-gray-50 to-white border border-gray-200"
+                        className="app-panel-soft flex items-center justify-between p-3"
                       >
                         <div className="flex items-center gap-3">
                           <span 
                             className="inline-block w-4 h-4 rounded" 
                             style={{ backgroundColor: c.color }} 
                           />
-                          <span className="font-medium text-gray-900">{c.condition}</span>
-                          <span className="text-sm text-gray-500">({c.percentage}%)</span>
+                          <span className="font-medium text-[var(--landing-text-strong)]">{c.condition}</span>
+                          <span className="text-sm app-muted">({c.percentage}%)</span>
                         </div>
                         <div className="text-right">
-                          <div className="text-lg font-bold text-gray-900 tabular-nums">
+                          <div className="text-lg font-bold text-[var(--landing-text-strong)] tabular-nums">
                             {currencyFormatter.format(avgPrice)}
                           </div>
-                          <div className="text-xs text-gray-500">avg price</div>
+                          <div className="text-xs app-muted">avg price</div>
                         </div>
                       </div>
                     );
@@ -315,10 +315,10 @@ export const BrandPage = () => {
 
         {/* Geographic Distribution Map */}
         <div className="mt-6">
-          <section className="bg-white/80 backdrop-blur-sm border border-white/40 rounded-2xl p-6 shadow-md">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Geographic Distribution</h3>
+          <section className="app-panel p-6">
+            <h3 className="text-lg font-semibold text-[var(--landing-text-strong)] mb-4">Geographic Distribution</h3>
             {errorCoords && (
-              <div className="mb-4 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <div className="mb-4 text-sm app-map-overlay px-3 py-2">
                 Map data update failed: {errorCoords}
               </div>
             )}
@@ -542,7 +542,7 @@ const FinlandMap = ({ coordinateBins = [], onViewportChange, loading = false }) 
         zoom={6}
         scrollWheelZoom={true}
         preferCanvas={true}
-        style={{ height: '100%', width: '100%', borderRadius: '1rem' }}
+        style={{ height: '100%', width: '100%', borderRadius: '0' }}
         zoomControl={true}
       >
         <MapViewportListener onChange={notifyViewportChange} />
@@ -565,7 +565,7 @@ const FinlandMap = ({ coordinateBins = [], onViewportChange, loading = false }) 
       </MapContainer>
       
       {/* Legend */}
-      <div className="absolute bottom-4 right-4 bg-white/95 backdrop-blur-sm p-3 rounded-lg shadow-md text-xs">
+      <div className="absolute bottom-4 right-4 app-map-overlay p-3 text-xs">
         <div className="font-semibold mb-2">Listings per Postal Code (1-day bins)</div>
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -604,28 +604,28 @@ const FinlandMap = ({ coordinateBins = [], onViewportChange, loading = false }) 
       </div>
 
       {!postalBoundaries && !boundariesError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-2xl">
+        <div className="absolute inset-0 flex items-center justify-center app-map-overlay">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading postal code boundaries...</p>
+            <p className="app-muted">Loading postal code boundaries...</p>
           </div>
         </div>
       )}
 
       {loading && (
-        <div className="absolute top-4 left-4 bg-white/95 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow">
+        <div className="absolute top-4 left-4 app-map-overlay px-3 py-2 text-sm">
           Updating map data...
         </div>
       )}
 
       {coordinateBins.length === 0 && !loading && postalBoundaries && (
-        <div className="absolute top-4 left-4 bg-white/95 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-700 shadow">
+        <div className="absolute top-4 left-4 app-map-overlay px-3 py-2 text-sm">
           No geographic data available for current view
         </div>
       )}
 
       {boundariesError && (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm rounded-2xl">
+        <div className="absolute inset-0 flex items-center justify-center app-map-overlay">
           <div className="max-w-sm text-center text-sm text-red-600 px-4">
             Failed to load map data: {boundariesError}
           </div>
